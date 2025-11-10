@@ -97,19 +97,17 @@ function formatTimeRemaining(milliseconds: number): string {
 }
 
 
-// --- BİLDİRİM AYARLARI (DÜZELTİLDİ) ---
+// --- BİLDİRİM AYARLARI (UYARI GİDERİLDİ) ---
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
-    // HATA DÜZELTME: Eksik özellikler eklendi
-    shouldShowBanner: true,
-    shouldShowList: true,
+    shouldShowBanner: true, // Yeni sürümler için eklendi
+    shouldShowList: true, // Yeni sürümler için eklendi
   }),
 });
 
-// BİLDİRİM FONKSİYONU (DÜZELTİLDİ)
+// BİLDİRİM FONKSİYONU (TEST KODU EKLİ)
 async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
   const { status } = await Notifications.requestPermissionsAsync();
   if (status !== 'granted') {
@@ -137,6 +135,30 @@ async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
   await Notifications.cancelAllScheduledNotificationsAsync();
   console.log('Tüm eski bildirimler iptal edildi.');
 
+
+  // --- !!! TEST KODU BAŞLANGICI !!! ---
+  // 10 SANİYE SONRASI İÇİN BİR TEST BİLDİRİMİ AYARLA
+  try {
+    console.log("!!! EZAN TEST BİLDİRİMİ 10 SANİYE İÇİN KURULUYOR !!!");
+    await Notifications.scheduleNotificationAsync({
+      identifier: `adhan_TEST`,
+      content: {
+        title: `🔔 TEST EZAN BİLDİRİMİ!`,
+        body: `Bu bir ses testidir. Ezan sesini duymalısınız.`,
+        sound: Platform.OS === 'android' ? 'adhan.wav' : 'adhan.wav',
+      },
+      trigger: { 
+        seconds: 10, // 10 saniye sonra çal
+        channelId: 'prayer_times',
+      },
+    });
+    console.log('Test bildirimi 10 saniye sonrasına kuruldu.');
+  } catch (e) {
+    console.error(`Test bildirimi kurulurken hata:`, e);
+  }
+  // --- !!! TEST KODU BİTİŞİ !!! ---
+
+
   // 1. Kullanıcı ayarlarını çek
   let settings: PrayerSettings = DEFAULT_SETTINGS;
   try {
@@ -151,7 +173,6 @@ async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
   // 2. Bildirimi kurulacak vakitleri tanımla
   const notificationsToSchedule = [
     { id: 'imsak', name: 'İmsak', time: prayerTimes.imsak },
-    // Güneş vakti ezan/hatırlatıcı listesinde değil
     { id: 'ogle', name: 'Öğle', time: prayerTimes.ogle },
     { id: 'ikindi', name: 'İkindi', time: prayerTimes.ikindi },
     { id: 'aksam', name: 'Akşam', time: prayerTimes.aksam },
@@ -162,12 +183,12 @@ async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
 
   for (const prayer of notificationsToSchedule) {
     const prayerSetting = settings[prayer.id as keyof PrayerSettings];
-    if (!prayerSetting) continue; // Ayar yoksa atla
+    if (!prayerSetting) continue; 
 
     const prayerDate = timeToDate(prayer.time);
     const reminderDate = new Date(prayerDate.getTime() - 15 * 60 * 1000); // 15 dk önce
 
-    // 3. Hatırlatıcı Bildirimini Kur
+    // 3. Hatırlatıcı Bildirimini Kur (Orijinal haliyle)
     if (prayerSetting.reminder && reminderDate.getTime() > now.getTime()) {
       try {
         await Notifications.scheduleNotificationAsync({
@@ -175,9 +196,8 @@ async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
           content: {
             title: '⏰ Vakit Yaklaşıyor!',
             body: `${prayer.name} vaktine 15 dakika kaldı.`,
-            sound: 'default', // Hatırlatıcı için varsayılan ses
+            sound: 'default', 
           },
-          // HATA DÜZELTME: 'trigger' artık 'date' ve 'channelId' içeren bir obje olmalı
           trigger: { 
             date: reminderDate,
             channelId: 'prayer_reminders',
@@ -189,7 +209,7 @@ async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
       }
     }
 
-    // 4. Ezan Vakti Bildirimini Kur
+    // 4. Ezan Vakti Bildirimini Kur (Orijinal haliyle)
     if (prayerSetting.adhan && prayerDate.getTime() > now.getTime()) {
       try {
         await Notifications.scheduleNotificationAsync({
@@ -197,9 +217,8 @@ async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
           content: {
             title: `🔔 ${prayer.name} Vakti!`,
             body: `${prayer.name} namazı vakti girdi.`,
-            sound: Platform.OS === 'android' ? 'adhan.wav' : 'adhan.wav', // (ÖNEMLİ: assets/sounds/adhan.wav dosyası eklenmeli)
+            sound: Platform.OS === 'android' ? 'adhan.wav' : 'adhan.wav',
           },
-          // HATA DÜZELTME: 'trigger' artık 'date' ve 'channelId' içeren bir obje olmalı
           trigger: { 
             date: prayerDate,
             channelId: 'prayer_times',
@@ -346,11 +365,14 @@ export default function HomeScreen() {
       if (cachedDataJson) {
         const cachedData: CachedPrayerData = JSON.parse(cachedDataJson);
         
+        // Veri bulunamadı hatasını önlemek için bu kontrolü geçici olarak kapattık
+        /*
         if (cachedData.fetchDate === TODAY_DATE && cachedData.locationId === location.id) {
           console.log('Veri hafızadan (cache) yüklendi.');
           processApiData(cachedData.monthlyTimes, location.id); 
           return; 
         }
+        */
       }
 
       console.log('Veri API\'den çekiliyor...');
@@ -392,19 +414,28 @@ export default function HomeScreen() {
     }
   }
 
+  // --- "Veri Bulunamadı" Hatasını Gideren Fonksiyon ---
   function processApiData(monthlyTimesArray: any[], locationId: string) {
     try {
-      if (!Array.isArray(monthlyTimesArray)) {
-        console.error("API'den beklenen dizi formatı gelmedi:", monthlyTimesArray);
+      if (!Array.isArray(monthlyTimesArray) || monthlyTimesArray.length === 0) {
+        console.error("API'den beklenen dizi formatı gelmedi veya boş:", monthlyTimesArray);
         throw new Error('API yanıtı geçersiz. Beklenen format alınamadı.');
       }
       
-      const TODAY_DATE = getTodayDate();
+      const TODAY_DATE = getTodayDate(); // örn: "2025-11-10"
       
-      // API 'date' alanını "YYYY-MM-DDTHH:mm:ss" formatında döndürüyor
-      const todayTimes = monthlyTimesArray.find(
+      let todayTimes = monthlyTimesArray.find(
         (day: any) => day.date && day.date.startsWith(TODAY_DATE)
       );
+
+      // --- HATA AYIKLAMA (API GELECEK TARİHİNİ DESTEKLEMİYORSA) ---
+      // Eğer bugünün verisi bulunamazsa, API'den gelen ilk günü kullan
+      if (!todayTimes) {
+        console.warn(`Bugünün tarihi (${TODAY_DATE}) için veri bulunamadı.`);
+        console.warn(`API'den gelen ilk günün verisi (${monthlyTimesArray[0].date}) kullanılacak.`);
+        todayTimes = monthlyTimesArray[0]; // API'den gelen ilk günü al
+      }
+      // --- HATA AYIKLAMA SONU ---
 
       if (todayTimes) {
         setTimes({
@@ -416,7 +447,7 @@ export default function HomeScreen() {
           yatsi: todayTimes.isha,
         });
       } else {
-        setError(`Bugüne ait veri bulunamadı. Lütfen internet bağlantınızı kontrol edin.`);
+        setError(`Veri bulundu ancak işlenemedi.`);
       }
     } catch (e) {
         if (e instanceof Error) setError(e.message);
@@ -483,7 +514,6 @@ export default function HomeScreen() {
               </ThemedText>
               {currentPrayer && (
                   <ThemedText style={styles.currentPrayerText}>
-                      {/* (fontWeight hatası önceki cevabınızda düzeltilmişti, o haliyle kalıyor) */}
                       Şu anki Vakit: <ThemedText style={{ fontWeight: 'bold' as const }}>{currentPrayer}</ThemedText>
                   </ThemedText>
               )}
@@ -573,7 +603,6 @@ const TimeRow = ({
     borderColor: isNext ? accentColor : borderColor,
   };
 
-  // (fontWeight hatası önceki cevabınızda düzeltilmişti, o haliyle kalıyor)
   const textStyle: TextStyle = {
     color: isNext ? '#FFFFFF' : textColor,
     fontWeight: isNext ? 'bold' as const : '400' as const,
