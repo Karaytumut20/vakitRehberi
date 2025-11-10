@@ -8,9 +8,9 @@
     "scheme": "vakitrehberi",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    
     "ios": {
       "supportsTablet": true,
-      // iOS için bildirim izinlerini ekle
       "infoPlist": {
         "UIBackgroundModes": ["remote-notification"]
       }
@@ -30,9 +30,14 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+
+    "assets": [
+      "./assets/images",
+      "./assets/sounds" 
+    ],
+
     "plugins": [
       "expo-router",
-      // Expo Notifications eklentisini ekle
       "expo-notifications",
       [
         "expo-splash-screen",

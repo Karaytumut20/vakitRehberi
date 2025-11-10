@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications'; // Bildirimler etkinleştirildi
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, TextStyle, TouchableOpacity, View } from 'react-native';
 
 // --- GEREKLİ İMPORTLAR ---
 import { ThemedText } from '@/components/themed-text';
@@ -35,6 +35,29 @@ interface CachedPrayerData {
 
 type PrayerName = 'İmsak' | 'Güneş' | 'Öğle' | 'İkindi' | 'Akşam' | 'Yatsı';
 const PRAYER_NAMES_ORDER: PrayerName[] = ['İmsak', 'Güneş', 'Öğle', 'İkindi', 'Akşam', 'Yatsı'];
+
+// --- YENİ: AYAR TİPİ ---
+// Bu tip, settings.tsx'teki ile aynı olmalı
+export interface PrayerSettings {
+  imsak: { adhan: boolean; reminder: boolean };
+  gunes: { adhan: boolean; reminder: boolean };
+  ogle: { adhan: boolean; reminder: boolean };
+  ikindi: { adhan: boolean; reminder: boolean };
+  aksam: { adhan: boolean; reminder: boolean };
+  yatsi: { adhan: boolean; reminder: boolean };
+}
+
+// Varsayılan ayarlar (settings.tsx'teki ile aynı)
+export const DEFAULT_SETTINGS: PrayerSettings = {
+  imsak: { adhan: true, reminder: true },
+  gunes: { adhan: false, reminder: false }, // Güneş vaktinde ezan/hatırlatıcı olmaz
+  ogle: { adhan: true, reminder: true },
+  ikindi: { adhan: true, reminder: true },
+  aksam: { adhan: true, reminder: true },
+  yatsi: { adhan: true, reminder: true },
+};
+
+export const SETTINGS_KEY = '@prayer_settings';
 // -------------------
 
 
@@ -74,15 +97,19 @@ function formatTimeRemaining(milliseconds: number): string {
 }
 
 
-// --- YENİ: BİLDİRİM AYARLARI ---
+// --- BİLDİRİM AYARLARI (DÜZELTİLDİ) ---
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
+    // HATA DÜZELTME: Eksik özellikler eklendi
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
+// BİLDİRİM FONKSİYONU (DÜZELTİLDİ)
 async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
   const { status } = await Notifications.requestPermissionsAsync();
   if (status !== 'granted') {
@@ -95,55 +122,93 @@ async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
     await Notifications.setNotificationChannelAsync('prayer_times', {
       name: 'Namaz Vakitleri',
       importance: Notifications.AndroidImportance.HIGH,
-      sound: 'default', 
+      sound: 'adhan.wav', // Özel ezan sesi için kanal ayarı
       vibrationPattern: [0, 250, 250, 250],
+    });
+    
+    await Notifications.setNotificationChannelAsync('prayer_reminders', {
+      name: 'Namaz Hatırlatıcıları',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: 'default', // Hatırlatıcı için varsayılan ses
     });
   }
   
+  // Önceki tüm bildirimleri iptal et (Her zaman en güncel vakitleri kurmak için)
   await Notifications.cancelAllScheduledNotificationsAsync();
-  console.log('Önceki tüm bildirimler iptal edildi.');
+  console.log('Tüm eski bildirimler iptal edildi.');
 
+  // 1. Kullanıcı ayarlarını çek
+  let settings: PrayerSettings = DEFAULT_SETTINGS;
+  try {
+    const settingsJson = await AsyncStorage.getItem(SETTINGS_KEY);
+    if (settingsJson) {
+      settings = JSON.parse(settingsJson);
+    }
+  } catch (e) {
+    console.error("Bildirim ayarları okunamadı, varsayılanlar kullanılıyor.", e);
+  }
+
+  // 2. Bildirimi kurulacak vakitleri tanımla
   const notificationsToSchedule = [
-    { name: 'İmsak', time: prayerTimes.imsak },
-    { name: 'Güneş', time: prayerTimes.gunes },
-    { name: 'Öğle', time: prayerTimes.ogle },
-    { name: 'İkindi', time: prayerTimes.ikindi },
-    { name: 'Akşam', time: prayerTimes.aksam },
-    { name: 'Yatsı', time: prayerTimes.yatsi },
+    { id: 'imsak', name: 'İmsak', time: prayerTimes.imsak },
+    // Güneş vakti ezan/hatırlatıcı listesinde değil
+    { id: 'ogle', name: 'Öğle', time: prayerTimes.ogle },
+    { id: 'ikindi', name: 'İkindi', time: prayerTimes.ikindi },
+    { id: 'aksam', name: 'Akşam', time: prayerTimes.aksam },
+    { id: 'yatsi', name: 'Yatsı', time: prayerTimes.yatsi },
   ];
   
-  const VAKIT_SAYISI = 6;
+  const now = new Date();
 
-  for (let i = 0; i < VAKIT_SAYISI; i++) {
-    const prayer = notificationsToSchedule[i];
-    
-    // Namaz vakti: Yalnızca saat ve dakika bilgisini kullanıyoruz.
-    const [hours, minutes] = prayer.time.split(':').map(Number);
-    
-    // Gecikmeli bildirimi planla: Her gün o saatte tetiklenecek.
-    const trigger: Notifications.NotificationTriggerInput = {
-      hour: hours,
-      minute: minutes,
-      repeats: true, // Her gün tekrar et
-    };
-    
-    // Akşam vakti bildirimi, İmsak bildirimi ile çakışmaması için farklı bir ID kullanır
-    const identifier = `prayer_${prayer.name.toLowerCase()}`;
+  for (const prayer of notificationsToSchedule) {
+    const prayerSetting = settings[prayer.id as keyof PrayerSettings];
+    if (!prayerSetting) continue; // Ayar yoksa atla
 
-    try {
-      await Notifications.scheduleNotificationAsync({
-        identifier: identifier,
-        content: {
-          title: `🔔 ${prayer.name} Vakti!`,
-          body: `${prayer.name} namazı vakti girdi. Namazınızı eda edebilirsiniz.`,
-          sound: 'default',
-          data: { prayerName: prayer.name },
-        },
-        trigger: trigger,
-      });
-      console.log(`${prayer.name} için günlük tekrar eden bildirim kuruldu: ${prayer.time}`);
-    } catch (e) {
-      console.error(`${prayer.name} bildirimi kurulurken hata:`, e);
+    const prayerDate = timeToDate(prayer.time);
+    const reminderDate = new Date(prayerDate.getTime() - 15 * 60 * 1000); // 15 dk önce
+
+    // 3. Hatırlatıcı Bildirimini Kur
+    if (prayerSetting.reminder && reminderDate.getTime() > now.getTime()) {
+      try {
+        await Notifications.scheduleNotificationAsync({
+          identifier: `reminder_${prayer.id}`,
+          content: {
+            title: '⏰ Vakit Yaklaşıyor!',
+            body: `${prayer.name} vaktine 15 dakika kaldı.`,
+            sound: 'default', // Hatırlatıcı için varsayılan ses
+          },
+          // HATA DÜZELTME: 'trigger' artık 'date' ve 'channelId' içeren bir obje olmalı
+          trigger: { 
+            date: reminderDate,
+            channelId: 'prayer_reminders',
+          },
+        });
+        console.log(`${prayer.name} için 15dk hatırlatıcı kuruldu: ${reminderDate.toLocaleTimeString()}`);
+      } catch (e) {
+        console.error(`${prayer.name} hatırlatıcısı kurulurken hata:`, e);
+      }
+    }
+
+    // 4. Ezan Vakti Bildirimini Kur
+    if (prayerSetting.adhan && prayerDate.getTime() > now.getTime()) {
+      try {
+        await Notifications.scheduleNotificationAsync({
+          identifier: `adhan_${prayer.id}`,
+          content: {
+            title: `🔔 ${prayer.name} Vakti!`,
+            body: `${prayer.name} namazı vakti girdi.`,
+            sound: Platform.OS === 'android' ? 'adhan.wav' : 'adhan.wav', // (ÖNEMLİ: assets/sounds/adhan.wav dosyası eklenmeli)
+          },
+          // HATA DÜZELTME: 'trigger' artık 'date' ve 'channelId' içeren bir obje olmalı
+          trigger: { 
+            date: prayerDate,
+            channelId: 'prayer_times',
+          },
+        });
+        console.log(`${prayer.name} için ezan bildirimi kuruldu: ${prayerDate.toLocaleTimeString()}`);
+      } catch (e) {
+        console.error(`${prayer.name} ezan bildirimi kurulurken hata:`, e);
+      }
     }
   }
 }
@@ -173,13 +238,14 @@ export default function HomeScreen() {
     }, [])
   );
   
-  // --- YENİ: BİLDİRİM KURULUMU useEffect'i ---
+  // Bildirimleri [times] değiştiğinde (yani vakitler çekildiğinde) kur
   useEffect(() => {
     if (times) {
+      // Bildirimleri kur (yeni, gelişmiş fonksiyon)
       scheduleDailyNotifications(times);
     }
   }, [times]);
-  // ------------------------------------------
+  
 
   useEffect(() => {
     if (!times) return; 
@@ -417,7 +483,8 @@ export default function HomeScreen() {
               </ThemedText>
               {currentPrayer && (
                   <ThemedText style={styles.currentPrayerText}>
-                      Şu anki Vakit: <ThemedText style={{ fontWeight: 'bold' }}>{currentPrayer}</ThemedText>
+                      {/* (fontWeight hatası önceki cevabınızda düzeltilmişti, o haliyle kalıyor) */}
+                      Şu anki Vakit: <ThemedText style={{ fontWeight: 'bold' as const }}>{currentPrayer}</ThemedText>
                   </ThemedText>
               )}
             </>
@@ -506,15 +573,16 @@ const TimeRow = ({
     borderColor: isNext ? accentColor : borderColor,
   };
 
-  const textStyle = {
+  // (fontWeight hatası önceki cevabınızda düzeltilmişti, o haliyle kalıyor)
+  const textStyle: TextStyle = {
     color: isNext ? '#FFFFFF' : textColor,
-    fontWeight: isNext ? 'bold' : '400',
+    fontWeight: isNext ? 'bold' as const : '400' as const,
   };
   
-  const timeTextStyle = {
+  const timeTextStyle: TextStyle = {
     // Vakit bilgisini her zaman vurgu renginde tut
     color: isNext ? '#FFFFFF' : accentColor,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
   };
 
   return (
