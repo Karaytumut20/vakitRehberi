@@ -19,17 +19,26 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: 'Ana Sayfa', // <-- Değişti
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Explore',
+          title: 'Aylık Takvim', // <-- Değişti
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
         }}
       />
+      {/* --- YENİ SEKMEYİ EKLE --- */}
+      <Tabs.Screen
+        name="qibla"
+        options={{
+          title: 'Kıble',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="safari.fill" color={color} />,
+        }}
+      />
+      {/* ------------------------- */}
     </Tabs>
   );
 }

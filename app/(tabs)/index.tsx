@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+// Bildirimleri Expo Go'da hata verdiği için geçici olarak devre dışı bırakıyoruz
+// import * as Notifications from 'expo-notifications'; 
 
 // --- YENİ TİPLER ---
 interface PrayerTimeData {
@@ -19,14 +21,12 @@ interface LocationData {
   name: string;
 }
 
-// API'den gelen aylık veriyi ve tarihi saklamak için
 interface CachedPrayerData {
   locationId: string;
   fetchDate: string; // Verinin çekildiği tarih (YYYY-MM-DD)
   monthlyTimes: any[]; // API'den gelen tam aylık dizi
 }
 
-// Geri sayım ve aktif vakit için tip
 type PrayerName = 'İmsak' | 'Güneş' | 'Öğle' | 'İkindi' | 'Akşam' | 'Yatsı';
 const PRAYER_NAMES_ORDER: PrayerName[] = ['İmsak', 'Güneş', 'Öğle', 'İkindi', 'Akşam', 'Yatsı'];
 // -------------------
@@ -41,13 +41,15 @@ function getTodayDate() {
   return `${year}-${month}-${day}`;
 }
 
-// --- YENİ YARDIMCI FONKSİYONLAR ---
-
 // "05:45" gibi bir string'i bugünün tarihine sahip bir Date nesnesine çevirir
 function timeToDate(timeString: string): Date {
+  // Eğer saat "24:00" gibi gelirse, JS'nin anlayacağı "00:00" yap
+  if (timeString.startsWith('24:')) {
+      timeString = timeString.replace('24:', '00:');
+  }
   const [hours, minutes] = timeString.split(':').map(Number);
   const date = new Date();
-  date.setHours(hours, minutes, 0, 0); // Saat ve dakikayı ayarla, saniye ve milisaniyeyi sıfırla
+  date.setHours(hours, minutes, 0, 0); 
   return date;
 }
 
@@ -64,8 +66,18 @@ function formatTimeRemaining(milliseconds: number): string {
     .map(val => val.toString().padStart(2, '0'))
     .join(':');
 }
-// ---------------------------------
 
+/*
+// --- BİLDİRİM AYARLARI (Expo Go'da çalışmaz) ---
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+// ---------------------------------
+*/
 
 export default function HomeScreen() {
   const [times, setTimes] = useState<PrayerTimeData | null>(null);
@@ -74,28 +86,22 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  // --- YENİ STATE'LER (Geri Sayım için) ---
   const [currentPrayer, setCurrentPrayer] = useState<PrayerName | null>(null);
   const [nextPrayer, setNextPrayer] = useState<PrayerName | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<string>('--:--:--');
-  // ------------------------------------
 
-  // Bu ekran her açıldığında (veya odaklandığında) çalışır
   useFocusEffect(
     React.useCallback(() => {
       checkLocationAndFetchTimes();
     }, [])
   );
 
-  // --- YENİ useEffect (Saniyelik Geri Sayım) ---
   useEffect(() => {
-    if (!times) return; // Vakitler yüklenmediyse sayacı başlatma
+    if (!times) return; 
 
-    // Her saniye çalışacak olan zamanlayıcı
     const interval = setInterval(() => {
       const now = new Date();
       
-      // Vakitleri Date nesnelerine çevir
       const prayerDateTimes = {
         'İmsak': timeToDate(times.imsak),
         'Güneş': timeToDate(times.gunes),
@@ -107,32 +113,27 @@ export default function HomeScreen() {
 
       let current: PrayerName | null = null;
       let next: PrayerName | null = null;
-      let minDiff = Infinity; // Kalan minimum süre (milisaniye)
+      let minDiff = Infinity; 
 
-      // Bir sonraki vakti ve içinde bulunan vakti bul
       for (const name of PRAYER_NAMES_ORDER) {
         const prayerTime = prayerDateTimes[name];
         const diff = prayerTime.getTime() - now.getTime();
 
-        // Şu anki vakti bul (geçmiş son vakit)
         if (diff <= 0) {
           current = name;
         }
 
-        // Bir sonraki vakti bul (gelecek ilk vakit)
         if (diff > 0 && diff < minDiff) {
           minDiff = diff;
           next = name;
         }
       }
 
-      // Eğer tüm vakitler geçtiyse (Yatsı'dan sonra)
       if (next === null) {
-        // Bir sonraki günün İmsak vaktini hedefle
         current = 'Yatsı';
         next = 'İmsak';
         const tomorrowImsak = timeToDate(times.imsak);
-        tomorrowImsak.setDate(tomorrowImsak.getDate() + 1); // Tarihi 1 gün ileri al
+        tomorrowImsak.setDate(tomorrowImsak.getDate() + 1); 
         minDiff = tomorrowImsak.getTime() - now.getTime();
       }
 
@@ -140,16 +141,26 @@ export default function HomeScreen() {
       setNextPrayer(next);
       setTimeRemaining(formatTimeRemaining(minDiff));
 
-    }, 1000); // Her 1000ms (1 saniye)
+    }, 1000); 
     
-    // Ekran kapanınca veya times değişince sayacı temizle
     return () => clearInterval(interval); 
 
-  }, [times]); // 'times' state'i değiştiğinde bu useEffect yeniden çalışır
-  // ----------------------------------------------
+  }, [times]); 
 
+  /*
+  // --- BİLDİRİM PLANLAMA (Expo Go'da çalışmaz) ---
+  useEffect(() => {
+    if (times) {
+      // scheduleDailyNotifications(times);
+      Alert.alert(
+        "Bildirimler Devre Dışı", 
+        "Uygulamayı Expo Go'da çalıştırdığınız için bildirimler devre dışı bırakıldı. Bildirimleri test etmek için 'npx expo run:android' komutu ile development build oluşturun."
+      );
+    }
+  }, [times]); 
+  // ------------------------------------------
+  */
 
-  // 1. Hafızadaki konumu kontrol et
   async function checkLocationAndFetchTimes() {
     setLoading(true);
     setTimes(null); 
@@ -157,34 +168,30 @@ export default function HomeScreen() {
     const TODAY_DATE = getTodayDate();
     
     try {
-      // 1.A. Konum seçili mi?
       const locationJson = await AsyncStorage.getItem('@selected_location');
       if (locationJson == null) {
         setError('Lütfen bir konum seçin.');
         setLoading(false);
         router.push('/select-location');
-        return; // Fonksiyondan çık
+        return; 
       }
       
       const location: LocationData = JSON.parse(locationJson);
       setSelectedLocation(location);
 
-      // 1.B. Hafızada (Cache) bu konuma ait güncel veri var mı?
       const cachedDataJson = await AsyncStorage.getItem('@cached_prayer_data');
       if (cachedDataJson) {
         const cachedData: CachedPrayerData = JSON.parse(cachedDataJson);
         
-        // Hafızadaki veri bugüne aitse ve aynı konumsa, API'ye gitme
         if (cachedData.fetchDate === TODAY_DATE && cachedData.locationId === location.id) {
           console.log('Veri hafızadan (cache) yüklendi.');
-          processApiData(cachedData.monthlyTimes, location.id); // Hafızadaki veriyi işle
-          return; // API'ye gitmeden fonksiyondan çık
+          processApiData(cachedData.monthlyTimes, location.id); 
+          return; 
         }
       }
 
-      // 1.C. Hafızada yoksa veya güncel değilse API'den çek
       console.log('Veri API\'den çekiliyor...');
-      fetchPrayerTimes(location.id, TODAY_DATE); 
+      await fetchPrayerTimes(location.id, TODAY_DATE); 
       
     } catch (e) {
       setError('Hafıza okunurken hata oluştu.');
@@ -192,7 +199,6 @@ export default function HomeScreen() {
     }
   }
 
-  // 2. Vakitleri Diyanet API'sinden (abdus.dev) çek
   async function fetchPrayerTimes(locationId: string, todayDate: string) {
     try {
       const response = await fetch(
@@ -205,11 +211,8 @@ export default function HomeScreen() {
 
       const monthlyTimesArray = await response.json();
       
-      // Veriyi işle (Bu fonksiyonu ayırdık çünkü cache'den de çağıracağız)
       processApiData(monthlyTimesArray, locationId);
 
-      // --- YENİ (Caching) ---
-      // Gelen aylık veriyi hafızaya kaydet
       const dataToCache: CachedPrayerData = {
         locationId: locationId,
         fetchDate: todayDate,
@@ -217,43 +220,100 @@ export default function HomeScreen() {
       };
       await AsyncStorage.setItem('@cached_prayer_data', JSON.stringify(dataToCache));
       console.log('Veri hafızaya kaydedildi.');
-      // --------------------
 
     } catch (e) {
       if (e instanceof Error) setError(e.message);
       else setError('Bilinmeyen bir hata oluştu.');
-      setLoading(false); // Sadece hata durumunda setLoading'i burada false yap
+      setLoading(false); 
     }
   }
 
-  // 3. Gelen API verisini işleyen fonksiyon (Yeni)
+  // BU FONKSİYON DÜZELTİLDİ
   function processApiData(monthlyTimesArray: any[], locationId: string) {
-    if (!Array.isArray(monthlyTimesArray)) {
-      console.error("API'den beklenen dizi formatı gelmedi:", monthlyTimesArray);
-      throw new Error('API yanıtı geçersiz. Beklenen format alınamadı.');
-    }
-    
-    const TODAY_DATE = getTodayDate();
-    const todayTimes = monthlyTimesArray.find(
-      (day: any) => day.date.startsWith(TODAY_DATE)
-    );
+    try {
+      if (!Array.isArray(monthlyTimesArray)) {
+        console.error("API'den beklenen dizi formatı gelmedi:", monthlyTimesArray);
+        throw new Error('API yanıtı geçersiz. Beklenen format alınamadı.');
+      }
+      
+      const TODAY_DATE = getTodayDate();
+      
+      // API 'date' alanını "YYYY-MM-DDTHH:mm:ss" formatında döndürüyor
+      const todayTimes = monthlyTimesArray.find(
+        (day: any) => day.date && day.date.startsWith(TODAY_DATE)
+      );
 
-    if (todayTimes) {
-      setTimes({
-        imsak: todayTimes.fajr,
-        gunes: todayTimes.sun,
-        ogle: todayTimes.dhuhr,
-        ikindi: todayTimes.asr,
-        aksam: todayTimes.maghrib,
-        yatsi: todayTimes.isha,
-      });
-    } else {
-      setError(`Veri Bulunamadı. \nKonum ID: ${locationId} \nTarih: ${TODAY_DATE}`);
+      if (todayTimes) {
+        setTimes({
+          imsak: todayTimes.fajr,
+          gunes: todayTimes.sun,
+          ogle: todayTimes.dhuhr,
+          ikindi: todayTimes.asr,
+          aksam: todayTimes.maghrib,
+          yatsi: todayTimes.isha,
+        });
+      } else {
+        setError(`Veri Bulunamadı. \nKonum ID: ${locationId} \nTarih: ${TODAY_DATE}`);
+      }
+    } catch (e) {
+        if (e instanceof Error) setError(e.message);
+        else setError('Veri işlenirken bilinmeyen bir hata oluştu.');
+    } finally {
+        setLoading(false); // Yüklemeyi bitir
     }
-    
-    setLoading(false); // Veri işlendikten sonra yüklemeyi bitir
   }
 
+  /* // --- BİLDİRİM FONKSİYONU (Expo Go'da çalışmaz) ---
+  async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== 'granted') {
+      console.log('Bildirim izni reddedildi.');
+      return;
+    }
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Vakit Bildirimleri',
+        importance: Notifications.AndroidImportance.MAX,
+      });
+    }
+    
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    console.log('Önceki bildirimler iptal edildi.');
+
+    const UYARI_SURESI_DAKIKA = 15; 
+
+    const notificationsToSchedule = [
+      { name: 'İmsak', time: prayerTimes.imsak },
+      { name: 'Öğle', time: prayerTimes.ogle },
+      { name: 'İkindi', time: prayerTimes.ikindi },
+      { name: 'Akşam', time: prayerTimes.aksam },
+      { name: 'Yatsı', time: prayerTimes.yatsi },
+    ];
+
+    for (const prayer of notificationsToSchedule) {
+      const prayerDate = timeToDate(prayer.time);
+      const triggerDate = new Date(prayerDate.getTime() - UYARI_SURESI_DAKIKA * 60000);
+      
+      if (triggerDate.getTime() > new Date().getTime()) {
+        try {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: 'Vakit Yaklaşıyor!',
+              body: `${prayer.name} vaktine ${UYARI_SURESI_DAKIKA} dakika kaldı.`,
+              sound: 'default',
+            },
+            trigger: triggerDate,
+          });
+          console.log(`${prayer.name} için bildirim ${triggerDate.toLocaleTimeString()} saatine kuruldu.`);
+        } catch (e) {
+          console.error(`${prayer.name} bildirimi kurulurken hata:`, e);
+        }
+      }
+    }
+  }
+  // ------------------------------------------
+  */
 
   // ----- RENDER KISMI -----
 
@@ -291,7 +351,6 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {/* --- YENİ (Geri Sayım Alanı) --- */}
       <View style={styles.countdownContainer}>
         {nextPrayer ? (
           <>
@@ -302,8 +361,6 @@ export default function HomeScreen() {
           <ActivityIndicator color="#007bff" />
         )}
       </View>
-      {/* --------------------------------- */}
-
 
       {times ? (
         <View style={styles.timesContainer}>
@@ -326,22 +383,20 @@ export default function HomeScreen() {
   );
 }
 
-// --- YENİ (Vurgulama için Ayrı Component) ---
-// Vakit satırını, aktif olup olmamasına göre stil vermek için ayırıyoruz.
+// TimeRow Component
 const TimeRow = ({ label, time, isActive }: { label: PrayerName; time: string; isActive: boolean }) => {
   return (
     <View style={[
       styles.timeRowContainer, 
-      isActive && styles.timeRowActive // Aktif ise arkaplanı vurgula
+      isActive && styles.timeRowActive 
     ]}>
       <Text style={[styles.timeRowLabel, isActive && styles.timeRowTextActive]}>{label}:</Text>
       <Text style={[styles.timeRowTime, isActive && styles.timeRowTextActive]}>{time}</Text>
     </View>
   );
 };
-// ------------------------------------------
 
-// --- GÜNCELLENMİŞ STİLLER ---
+// Stiller
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -357,7 +412,7 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     alignItems: 'center',
-    marginBottom: 20, // Azaltıldı
+    marginBottom: 20,
   },
   header: {
     fontSize: 28,
@@ -371,7 +426,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, 
     textAlign: 'center', 
   },
-  // YENİ (Geri Sayım Alanı Stilleri)
   countdownContainer: {
     width: '90%',
     alignItems: 'center',
@@ -391,7 +445,6 @@ const styles = StyleSheet.create({
     color: '#004a99',
     marginTop: 5,
   },
-  // ------------------------------
   timesContainer: {
     backgroundColor: '#ffffff',
     borderRadius: 10,
@@ -401,9 +454,8 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 4,
     width: '90%',
-    overflow: 'hidden', // Vurgulama için eklendi
+    overflow: 'hidden',
   },
-  // YENİ (TimeRow Component Stilleri)
   timeRowContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -413,7 +465,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f0f0f0',
   },
   timeRowActive: {
-    backgroundColor: '#007bff', // Vurgu rengi
+    backgroundColor: '#007bff',
   },
   timeRowLabel: {
     fontSize: 20,
@@ -425,10 +477,9 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   timeRowTextActive: {
-    color: '#ffffff', // Vurgu metin rengi
+    color: '#ffffff',
     fontWeight: 'bold',
   },
-  // ------------------------------
   errorText: {
     color: 'red',
     fontSize: 16,
