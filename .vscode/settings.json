@@ -3,5 +3,14 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+  
+  // --- YENİ DENO AYARLARI BURADA ---
+  // Projenin geri kalanı React Native (Node) olduğu için
+  // Deno'yu sadece 'supabase/functions' klasörü için etkinleştiriyoruz.
+  "deno.enablePaths": [
+    "./supabase/functions"
+  ],
+  "deno.lint": true,
+  "deno.unstable": true
 }
