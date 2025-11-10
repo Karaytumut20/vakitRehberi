@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      // iOS için bildirim izinlerini ekle
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -28,6 +32,8 @@
     },
     "plugins": [
       "expo-router",
+      // Expo Notifications eklentisini ekle
+      "expo-notifications",
       [
         "expo-splash-screen",
         {

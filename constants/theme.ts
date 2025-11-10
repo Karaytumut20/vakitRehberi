@@ -5,25 +5,35 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+// Deep Teal/Green: Primary sophisticated accent color
+const primaryAccent = '#00796B'; 
+// Rich Gold/Amber: Luxurious highlight color
+const secondaryAccent = '#FFC107'; 
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    // Elegant Light Mode
+    text: '#1C1C1E', // Very dark text
+    background: '#F8F8F8', // Slightly off-white background
+    tint: primaryAccent, // Main UI color
+    highlight: secondaryAccent, // Gold highlight for important info (countdown)
+    card: '#FFFFFF', // Clean white cards
+    border: '#E0E0E0',
+    icon: '#424242',
+    tabIconDefault: '#8E8E93',
+    tabIconSelected: primaryAccent,
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    // Luxurious Dark Mode
+    text: '#E5E5E5', // Light text
+    background: '#121212', // Deep black background
+    tint: secondaryAccent, // Gold tint for main UI
+    highlight: secondaryAccent, // Gold highlight for important info (countdown)
+    card: '#1C1C1E', // Very dark card background
+    border: '#333333',
+    icon: '#A0A0A0',
+    tabIconDefault: '#636366',
+    tabIconSelected: secondaryAccent,
   },
 };
 
