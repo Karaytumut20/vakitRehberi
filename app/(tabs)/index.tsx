@@ -5,7 +5,6 @@ import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av'; // ✅ Sound yok; Audio.Sound kullanılacak
 import * as Notifications from 'expo-notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -13,7 +12,6 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -21,6 +19,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+/** --- expo-audio (yeni API) --- */
+import { setAudioModeAsync, useAudioPlayer } from 'expo-audio'; // why: expo-av yerine expo-audio API
 
 interface PrayerTimeData { imsak: string; gunes: string; ogle: string; ikindi: string; aksam: string; yatsi: string; }
 interface LocationData { id: string; name: string; }
@@ -46,10 +48,9 @@ export const DEFAULT_SETTINGS: PrayerSettings = {
 };
 export const SETTINGS_KEY = '@prayer_settings';
 
-// === Config'ine uygun ===
 const ANDROID_CHANNEL_ID = 'prayer_times_v3';
 const SOUND_NAME = 'adhan.mp3';
-const ADHAN_REQUIRE = require('../../assets/sounds/adhan.mp3'); // app/(tabs) => ../../assets/...
+const ADHAN_REQUIRE = require('../../assets/sounds/adhan.mp3');
 
 const SCHEDULED_HASH_KEY = '@prayer_scheduled_hash';
 const SAFE_WINDOW_MS = 30_000;
@@ -88,19 +89,17 @@ function formatTimeRemaining(ms: number) {
   return [h, m, ss].map(v => String(v).padStart(2, '0')).join(':');
 }
 
-// === Bildirim davranışı: tip uyumlu ===
+/** Bildirim davranışı */
 function setForegroundAlerts(enabled: boolean) {
   Notifications.setNotificationHandler({
     handleNotification: async () => {
-      // Neden: SDK/types farklı sürümlerde shouldShowBanner/piority isteyebilir
       const behavior: any = {
         shouldShowAlert: enabled,
         shouldPlaySound: enabled,
         shouldSetBadge: false,
       };
-      if (Platform.OS === 'ios') behavior.shouldShowBanner = enabled; // ✅ TS hatasını giderir
-      if (Platform.OS === 'android')
-        behavior.priority = Notifications.AndroidNotificationPriority.HIGH;
+      if (Platform.OS === 'ios') behavior.shouldShowBanner = enabled;
+      if (Platform.OS === 'android') behavior.priority = Notifications.AndroidNotificationPriority.HIGH;
       return behavior as Notifications.NotificationBehavior;
     },
   });
@@ -140,7 +139,7 @@ function buildSchedulePayload(times: PrayerTimeData, settings: PrayerSettings) {
   return { list, hash };
 }
 
-// === Bildirim fallback (arka plan) ===
+/** Bildirim fallback */
 async function scheduleDailyNotifications(prayerTimes: PrayerTimeData, withSound = true) {
   const perm = await Notifications.getPermissionsAsync();
   if (!perm.granted) {
@@ -180,16 +179,17 @@ async function scheduleDailyNotifications(prayerTimes: PrayerTimeData, withSound
   await AsyncStorage.setItem(SCHEDULED_HASH_KEY, hash);
 }
 
-// === Ön planda gerçek ezan (expo-av) ===
+/** --- Ön planda gerçek ezan (expo-audio) --- */
+let audioModeConfigured = false;
 async function ensureAudioModeOnce() {
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: false,
-    staysActiveInBackground: true,      // kilit ekranında çalabilsin
-    playsInSilentModeIOS: true,         // sessizde çal
-    shouldDuckAndroid: false,
-    interruptionModeIOS: InterruptionModeIOS.DuckOthers,
-    interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-    playThroughEarpieceAndroid: false,
+  if (audioModeConfigured) return;
+  audioModeConfigured = true;
+  // why: yeni API string tabanlı; iOS/Android tek seçenek seti
+  await setAudioModeAsync({
+    playsInSilentMode: true,
+    shouldPlayInBackground: true,
+    interruptionModeAndroid: 'duckOthers',
+    interruptionMode: 'mixWithOthers',
   });
 }
 
@@ -213,54 +213,33 @@ export default function HomeScreen() {
 
   const lastScheduledTimesJsonRef = useRef<string | null>(null);
 
-  // ✅ Audio.Sound instance
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  /** ✅ expo-audio player (hook yaşam döngüsünü yönetir) */
+  const adhanPlayer = useAudioPlayer(ADHAN_REQUIRE);
 
   useEffect(() => {
     (async () => {
       try {
         await ensureAudioModeOnce();
-        const s = new Audio.Sound();
-        await s.loadAsync(ADHAN_REQUIRE, { shouldPlay: false, volume: 1.0, isLooping: false });
-        soundRef.current = s;
       } catch (err) {
         console.warn('Audio init error', err);
       }
     })();
-
-    return () => {
-      timersRef.current.forEach(t => clearTimeout(t));
-      timersRef.current = [];
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
-        soundRef.current = null;
-      }
-    };
   }, []);
 
   const playAdhan = useMemo(() => {
     return async () => {
       try {
         await ensureAudioModeOnce();
-        if (!soundRef.current) {
-          const s = new Audio.Sound();
-          await s.loadAsync(ADHAN_REQUIRE, { shouldPlay: false, volume: 1.0, isLooping: false });
-          soundRef.current = s;
-        }
-        const status = await soundRef.current.getStatusAsync();
-        if (!status.isLoaded) {
-          await soundRef.current.loadAsync(ADHAN_REQUIRE, { shouldPlay: false });
-        }
-        await soundRef.current.setPositionAsync(0);
-        await soundRef.current.playAsync();
+        adhanPlayer.seekTo(0);
+        await adhanPlayer.play();
       } catch (e) {
         console.warn('Ezan çalma hatası', e);
       }
     };
-  }, []);
+  }, [adhanPlayer]);
 
   // Ön plan timers
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => {
     if (!times) return;
     (async () => {
@@ -275,13 +254,17 @@ export default function HomeScreen() {
         const date = safeTimeToFutureDate(p.time, now);
         const ms = date.getTime() - now.getTime();
         const id = setTimeout(() => {
-          // Neden: App ön plandaysa gerçek ezanı çal
+          // why: ön planda gerçek ezanı çal
           playAdhan();
         }, ms);
         timersRef.current.push(id);
         console.log(`LOG: Foreground timer ${p.name} -> ${date.toLocaleString('tr-TR')} (+${Math.round(ms / 1000)}s)`);
       }
     })();
+    return () => {
+      timersRef.current.forEach(t => clearTimeout(t));
+      timersRef.current = [];
+    };
   }, [times, playAdhan]);
 
   // Bildirim fallback
