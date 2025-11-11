@@ -44,8 +44,8 @@
       [
         "expo-notifications",
         {
-          "defaultChannel": "prayer_times_v2",
-          "sounds": ["./assets/sounds/adhan.wav"]
+          "defaultChannel": "prayer_times_v3",
+          "sounds": ["./assets/sounds/adhan.mp3"] 
         }
       ],
       [
@@ -61,8 +61,8 @@
     ],
 
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
+
     }
   }
 }

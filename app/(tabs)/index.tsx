@@ -1,17 +1,26 @@
 // app/(tabs)/index.tsx
-// — Kurallar —
-// 1) Bildirim sesleri kodda path ile değil, SADECE dosya adıyla çağrılır (iOS/Android standardı).
-// 2) Tam yol, yukarıdaki app.json plugin altında verildi; bu nedenle burada 'adhan.wav' adı yeterlidir.
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av'; // ✅ Sound yok; Audio.Sound kullanılacak
 import * as Notifications from 'expo-notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, TextStyle, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  TextStyle,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 interface PrayerTimeData { imsak: string; gunes: string; ogle: string; ikindi: string; aksam: string; yatsi: string; }
 interface LocationData { id: string; name: string; }
@@ -20,12 +29,12 @@ type PrayerName = 'İmsak' | 'Güneş' | 'Öğle' | 'İkindi' | 'Akşam' | 'Yats
 const PRAYER_NAMES_ORDER: PrayerName[] = ['İmsak', 'Güneş', 'Öğle', 'İkindi', 'Akşam', 'Yatsı'];
 
 export interface PrayerSettings {
-  imsak: { adhan: boolean; };
-  gunes: { adhan: boolean; };
-  ogle: { adhan: boolean; };
-  ikindi: { adhan: boolean; };
-  aksam: { adhan: boolean; };
-  yatsi: { adhan: boolean; };
+  imsak: { adhan: boolean };
+  gunes: { adhan: boolean };
+  ogle: { adhan: boolean };
+  ikindi: { adhan: boolean };
+  aksam: { adhan: boolean };
+  yatsi: { adhan: boolean };
 }
 export const DEFAULT_SETTINGS: PrayerSettings = {
   imsak: { adhan: true },
@@ -37,60 +46,66 @@ export const DEFAULT_SETTINGS: PrayerSettings = {
 };
 export const SETTINGS_KEY = '@prayer_settings';
 
-const SOUND_FILE_PATH = './assets/sounds/adhan.wav'; // neden: config’te tam yol olarak kaydediliyor
-const SOUND_NAME = 'adhan.wav'; // neden: kod tarafında SADECE isim kullanılır
+// === Config'ine uygun ===
+const ANDROID_CHANNEL_ID = 'prayer_times_v3';
+const SOUND_NAME = 'adhan.mp3';
+const ADHAN_REQUIRE = require('../../assets/sounds/adhan.mp3'); // app/(tabs) => ../../assets/...
+
 const SCHEDULED_HASH_KEY = '@prayer_scheduled_hash';
-const SAFE_WINDOW_MS = 30 * 1000;
+const SAFE_WINDOW_MS = 30_000;
 
 function getTodayDate() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
 function timeToDateBase(timeString: string): Date {
   let t = timeString;
+  if (typeof t !== 'string') {
+    console.warn(`timeToDateBase: Geçersiz saat: ${t} -> '00:00'`);
+    t = '00:00';
+  }
   if (t.startsWith('24:')) t = t.replace('24:', '00:');
   const [h, m] = t.split(':').map(Number);
   const d = new Date();
   d.setHours(h, m, 0, 0);
   return d;
 }
+
 function safeTimeToFutureDate(timeString: string, now = new Date()): Date {
   const candidate = timeToDateBase(timeString);
   const diff = candidate.getTime() - now.getTime();
   if (diff > SAFE_WINDOW_MS) return candidate;
-  return new Date(candidate.getTime() + 24*60*60*1000);
-}
-function formatTimeRemaining(ms: number) {
-  if (ms < 0) return '00:00:00';
-  const s = Math.floor(ms/1000);
-  const h = Math.floor(s/3600);
-  const m = Math.floor((s%3600)/60);
-  const ss = s%60;
-  return [h,m,ss].map(v=>String(v).padStart(2,'0')).join(':');
+  return new Date(candidate.getTime() + 24 * 60 * 60 * 1000);
 }
 
-// Ön planda default: sessiz
+function formatTimeRemaining(ms: number) {
+  if (ms < 0) return '00:00:00';
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  return [h, m, ss].map(v => String(v).padStart(2, '0')).join(':');
+}
+
+// === Bildirim davranışı: tip uyumlu ===
 function setForegroundAlerts(enabled: boolean) {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: enabled,
-      shouldPlaySound: enabled,
-      shouldSetBadge: false,
-    }),
+    handleNotification: async () => {
+      // Neden: SDK/types farklı sürümlerde shouldShowBanner/piority isteyebilir
+      const behavior: any = {
+        shouldShowAlert: enabled,
+        shouldPlaySound: enabled,
+        shouldSetBadge: false,
+      };
+      if (Platform.OS === 'ios') behavior.shouldShowBanner = enabled; // ✅ TS hatasını giderir
+      if (Platform.OS === 'android')
+        behavior.priority = Notifications.AndroidNotificationPriority.HIGH;
+      return behavior as Notifications.NotificationBehavior;
+    },
   });
 }
 setForegroundAlerts(false);
-
-async function ensureAndroidChannel() {
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('prayer_times', {
-      name: 'Namaz Vakitleri',
-      importance: Notifications.AndroidImportance.HIGH,
-      sound: SOUND_NAME, // neden: kanal sadece dosya adını ister
-      vibrationPattern: [0, 250, 250, 250],
-    });
-  }
-}
 
 async function getMergedSettings(): Promise<PrayerSettings> {
   try {
@@ -120,12 +135,13 @@ function buildSchedulePayload(times: PrayerTimeData, settings: PrayerSettings) {
     { key: 'aksam', name: 'Akşam', time: times.aksam, enabled: settings.aksam.adhan },
     { key: 'yatsi', name: 'Yatsı', time: times.yatsi, enabled: settings.yatsi.adhan },
   ].filter(x => x.enabled);
-  const normalized = list.map(x => ({ k: x.key, t: x.time })).sort((a,b)=>a.k.localeCompare(b.k));
+  const normalized = list.map(x => ({ k: x.key, t: x.time })).sort((a, b) => a.k.localeCompare(b.k));
   const hash = JSON.stringify(normalized);
   return { list, hash };
 }
 
-async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
+// === Bildirim fallback (arka plan) ===
+async function scheduleDailyNotifications(prayerTimes: PrayerTimeData, withSound = true) {
   const perm = await Notifications.getPermissionsAsync();
   if (!perm.granted) {
     const { status } = await Notifications.requestPermissionsAsync();
@@ -135,13 +151,11 @@ async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
     }
   }
 
-  await ensureAndroidChannel();
-
   const settings = await getMergedSettings();
   const { list, hash } = buildSchedulePayload(prayerTimes, settings);
   const lastHash = await AsyncStorage.getItem(SCHEDULED_HASH_KEY);
   if (lastHash === hash) {
-    console.log('LOG: Kurulu saatler değişmedi, atlandı.');
+    console.log('LOG: Kurulu bildirimler değişmedi.');
     return;
   }
 
@@ -154,51 +168,29 @@ async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
       content: {
         title: `🔔 ${p.name} Vakti!`,
         body: `${p.name} vakti girdi.`,
-        sound: SOUND_NAME, // neden: kodda sadece isim
+        sound: withSound ? SOUND_NAME : undefined,
       },
-      trigger: { date, ...(Platform.OS === 'android' ? { channelId: 'prayer_times' } as any : {}) },
+      trigger: {
+        date,
+        ...(Platform.OS === 'android' ? ({ channelId: ANDROID_CHANNEL_ID } as any) : {}),
+      },
     });
-    console.log(`LOG: ${p.name} -> ${date.toLocaleString('tr-TR')}`);
+    console.log(`LOG: Notification ${p.name} -> ${date.toLocaleString('tr-TR')}`);
   }
-
   await AsyncStorage.setItem(SCHEDULED_HASH_KEY, hash);
 }
 
-async function triggerAdhanTest(setTesting: (v: boolean) => void) {
-  try {
-    setTesting(true);
-    const perm = await Notifications.getPermissionsAsync();
-    if (!perm.granted) {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Bildirim İzni', 'Test için bildirim izni gerekli.');
-        setTesting(false);
-        return;
-      }
-    }
-
-    await ensureAndroidChannel();
-    setForegroundAlerts(true); // neden: testte ön planda ses/bildirim görmek istiyoruz
-
-    const fireDate = new Date(Date.now() + 10_000);
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: '🔔 TEST: Ezan Vakti',
-        body: `Ses: ${SOUND_NAME} (kaynak: ${SOUND_FILE_PATH})`,
-        sound: SOUND_NAME,
-      },
-      trigger: { date: fireDate, ...(Platform.OS === 'android' ? { channelId: 'prayer_times' } as any : {}) },
-    });
-
-    setTimeout(() => {
-      setForegroundAlerts(false); // neden: normal davranışa dön
-      setTesting(false);
-    }, 15_000);
-  } catch (e) {
-    console.error('Test bildirimi hatası', e);
-    setForegroundAlerts(false);
-    setTesting(false);
-  }
+// === Ön planda gerçek ezan (expo-av) ===
+async function ensureAudioModeOnce() {
+  await Audio.setAudioModeAsync({
+    allowsRecordingIOS: false,
+    staysActiveInBackground: true,      // kilit ekranında çalabilsin
+    playsInSilentModeIOS: true,         // sessizde çal
+    shouldDuckAndroid: false,
+    interruptionModeIOS: InterruptionModeIOS.DuckOthers,
+    interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+    playThroughEarpieceAndroid: false,
+  });
 }
 
 export default function HomeScreen() {
@@ -221,35 +213,108 @@ export default function HomeScreen() {
 
   const lastScheduledTimesJsonRef = useRef<string | null>(null);
 
-  useFocusEffect(React.useCallback(() => { checkLocationAndFetchTimes(); }, []));
+  // ✅ Audio.Sound instance
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        await ensureAudioModeOnce();
+        const s = new Audio.Sound();
+        await s.loadAsync(ADHAN_REQUIRE, { shouldPlay: false, volume: 1.0, isLooping: false });
+        soundRef.current = s;
+      } catch (err) {
+        console.warn('Audio init error', err);
+      }
+    })();
+
+    return () => {
+      timersRef.current.forEach(t => clearTimeout(t));
+      timersRef.current = [];
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current = null;
+      }
+    };
+  }, []);
+
+  const playAdhan = useMemo(() => {
+    return async () => {
+      try {
+        await ensureAudioModeOnce();
+        if (!soundRef.current) {
+          const s = new Audio.Sound();
+          await s.loadAsync(ADHAN_REQUIRE, { shouldPlay: false, volume: 1.0, isLooping: false });
+          soundRef.current = s;
+        }
+        const status = await soundRef.current.getStatusAsync();
+        if (!status.isLoaded) {
+          await soundRef.current.loadAsync(ADHAN_REQUIRE, { shouldPlay: false });
+        }
+        await soundRef.current.setPositionAsync(0);
+        await soundRef.current.playAsync();
+      } catch (e) {
+        console.warn('Ezan çalma hatası', e);
+      }
+    };
+  }, []);
+
+  // Ön plan timers
+  useEffect(() => {
+    if (!times) return;
+    (async () => {
+      const settings = await getMergedSettings();
+      const { list } = buildSchedulePayload(times, settings);
+
+      timersRef.current.forEach(t => clearTimeout(t));
+      timersRef.current = [];
+
+      const now = new Date();
+      for (const p of list) {
+        const date = safeTimeToFutureDate(p.time, now);
+        const ms = date.getTime() - now.getTime();
+        const id = setTimeout(() => {
+          // Neden: App ön plandaysa gerçek ezanı çal
+          playAdhan();
+        }, ms);
+        timersRef.current.push(id);
+        console.log(`LOG: Foreground timer ${p.name} -> ${date.toLocaleString('tr-TR')} (+${Math.round(ms / 1000)}s)`);
+      }
+    })();
+  }, [times, playAdhan]);
+
+  // Bildirim fallback
   useEffect(() => {
     if (!times) return;
     const json = JSON.stringify(times);
     if (json !== lastScheduledTimesJsonRef.current) {
-      scheduleDailyNotifications(times);
+      scheduleDailyNotifications(times, /* withSound */ true).catch(() => {});
       lastScheduledTimesJsonRef.current = json;
     }
   }, [times]);
 
+  useFocusEffect(React.useCallback(() => { checkLocationAndFetchTimes(); }, []));
+
+  // Geri sayım
   useEffect(() => {
     if (!times) return;
     const i = setInterval(() => {
       const now = new Date();
       const prayerDateTimes: Record<PrayerName, Date> = {
-        'İmsak': timeToDateBase(times.imsak),
-        'Güneş': timeToDateBase(times.gunes),
-        'Öğle': timeToDateBase(times.ogle),
-        'İkindi': timeToDateBase(times.ikindi),
-        'Akşam': timeToDateBase(times.aksam),
-        'Yatsı': timeToDateBase(times.yatsi),
+        İmsak: timeToDateBase(times.imsak),
+        Güneş: timeToDateBase(times.gunes),
+        Öğle: timeToDateBase(times.ogle),
+        İkindi: timeToDateBase(times.ikindi),
+        Akşam: timeToDateBase(times.aksam),
+        Yatsı: timeToDateBase(times.yatsi),
       };
       let current: PrayerName | null = null;
       let next: PrayerName | null = null;
       let minDiff = Infinity;
       const all = [
         ...PRAYER_NAMES_ORDER.map(name => ({ name, time: prayerDateTimes[name], isNextDay: false })),
-        { name: 'İmsak' as PrayerName, time: new Date(prayerDateTimes['İmsak'].getTime() + 24*60*60*1000), isNextDay: true },
+        { name: 'İmsak' as PrayerName, time: new Date(prayerDateTimes['İmsak'].getTime() + 24 * 60 * 60 * 1000), isNextDay: true },
       ];
       for (const { name, time, isNextDay } of all) {
         const diff = time.getTime() - now.getTime();
@@ -261,7 +326,7 @@ export default function HomeScreen() {
         next = 'İmsak';
         minDiff = all[6].time.getTime() - now.getTime();
       }
-      if (current === null && next === 'İmsak' && minDiff > 12*60*60*1000) current = 'Yatsı';
+      if (current === null && next === 'İmsak' && minDiff > 12 * 60 * 60 * 1000) current = 'Yatsı';
       if (current === null) current = 'Yatsı';
       setCurrentPrayer(current);
       setNextPrayer(next);
@@ -319,8 +384,12 @@ export default function HomeScreen() {
     try {
       if (!Array.isArray(monthlyTimesArray) || monthlyTimesArray.length === 0) throw new Error('API yanıtı geçersiz.');
       const TODAY_DATE = getTodayDate();
-      let todayTimes = monthlyTimesArray.find((d: any) => d.date && d.date.startsWith(TODAY_DATE));
+
+      let todayTimes = monthlyTimesArray.find(
+        (d: any) => typeof d.date === 'string' && d.date.startsWith(TODAY_DATE)
+      );
       if (!todayTimes) todayTimes = monthlyTimesArray[0];
+
       if (todayTimes) {
         setTimes({
           imsak: todayTimes.fajr,
@@ -338,27 +407,31 @@ export default function HomeScreen() {
     }
   }
 
-  if (loading) {
-    return (
-      <ThemedView style={styles.center}>
-        <ActivityIndicator size="large" color={mainAccentColor} />
-        <ThemedText style={styles.loadingText}>Yükleniyor...</ThemedText>
-      </ThemedView>
-    );
-  }
-  if (error && !times) {
-    return (
-      <ThemedView style={styles.center}>
-        <ThemedText style={styles.errorText} type="subtitle">Hata Oluştu!</ThemedText>
-        <ThemedText style={styles.errorText}>{error}</ThemedText>
-        <TouchableOpacity style={[styles.button, { backgroundColor: mainAccentColor }]} onPress={() => router.push('/select-location')}>
-          <ThemedText style={styles.buttonText}>Konum Seç</ThemedText>
-        </TouchableOpacity>
-      </ThemedView>
-    );
+  async function triggerAdhanTest(setTestingFn: (v: boolean) => void) {
+    try {
+      setTestingFn(true);
+      await playAdhan();
+    } catch (e) {
+      console.error('Test çalma hatası', e);
+    } finally {
+      setTestingFn(false);
+    }
   }
 
-  return (
+  return loading ? (
+    <ThemedView style={styles.center}>
+      <ActivityIndicator size="large" color={mainAccentColor} />
+      <ThemedText style={styles.loadingText}>Yükleniyor...</ThemedText>
+    </ThemedView>
+  ) : error && !times ? (
+    <ThemedView style={styles.center}>
+      <ThemedText style={styles.errorText} type="subtitle">Hata Oluştu!</ThemedText>
+      <ThemedText style={styles.errorText}>{error}</ThemedText>
+      <TouchableOpacity style={[styles.button, { backgroundColor: mainAccentColor }]} onPress={() => router.push('/select-location')}>
+        <ThemedText style={styles.buttonText}>Konum Seç</ThemedText>
+      </TouchableOpacity>
+    </ThemedView>
+  ) : (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -388,13 +461,12 @@ export default function HomeScreen() {
           </View>
         ) : (<ThemedText style={styles.emptyText}>Bugüne ait vakitler yüklenemedi.</ThemedText>)}
 
-        {/* TEST: 10 sn sonra bildirim ve adhan.wav */}
         <TouchableOpacity
           disabled={testing}
           style={[styles.button, { backgroundColor: testing ? '#9e9e9e' : mainAccentColor }]}
           onPress={() => triggerAdhanTest(setTesting)}
         >
-          <ThemedText style={styles.buttonText}>{testing ? 'Test Kuruluyor…' : 'Ezanı Test Et (10 sn)'}</ThemedText>
+          <ThemedText style={styles.buttonText}>{testing ? 'Çalıyor…' : 'Ezanı Test Et'}</ThemedText>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.button, { backgroundColor: mainAccentColor }]} onPress={() => router.push('/select-location')}>
@@ -405,7 +477,7 @@ export default function HomeScreen() {
   );
 }
 
-const TimeRow = ({ label, time, isActive, isNext }: { label: PrayerName; time: string; isActive: boolean; isNext: boolean; }) => {
+const TimeRow = ({ label, time, isActive, isNext }: { label: PrayerName; time: string; isActive: boolean; isNext: boolean }) => {
   const textColor = useThemeColor({}, 'text');
   const accentColor = useThemeColor({}, 'tint');
   const cardBackgroundColor = useThemeColor({}, 'card');
