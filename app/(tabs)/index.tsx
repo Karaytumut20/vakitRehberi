@@ -1,8 +1,8 @@
 // app/(tabs)/index.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications'; // Bildirimler etkinleştirildi
+import * as Notifications from 'expo-notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react'; // useRef eklendi
 import { ActivityIndicator, Alert, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, TextStyle, TouchableOpacity, View } from 'react-native';
 
 // --- GEREKLİ İMPORTLAR ---
@@ -39,22 +39,22 @@ const PRAYER_NAMES_ORDER: PrayerName[] = ['İmsak', 'Güneş', 'Öğle', 'İkind
 // --- AYAR TİPİ ---
 // Bu tip, settings.tsx'teki ile aynı olmalı
 export interface PrayerSettings {
-  imsak: { adhan: boolean; reminder: boolean };
-  gunes: { adhan: boolean; reminder: boolean };
-  ogle: { adhan: boolean; reminder: boolean };
-  ikindi: { adhan: boolean; reminder: boolean };
-  aksam: { adhan: boolean; reminder: boolean };
-  yatsi: { adhan: boolean; reminder: boolean };
+  imsak: { adhan: boolean; };
+  gunes: { adhan: boolean; };
+  ogle: { adhan: boolean; };
+  ikindi: { adhan: boolean; };
+  aksam: { adhan: boolean; };
+  yatsi: { adhan: boolean; };
 }
 
 // Varsayılan ayarlar (settings.tsx'teki ile aynı)
 export const DEFAULT_SETTINGS: PrayerSettings = {
-  imsak: { adhan: true, reminder: true },
-  gunes: { adhan: false, reminder: false }, // Güneş vaktinde ezan/hatırlatıcı olmaz
-  ogle: { adhan: true, reminder: true },
-  ikindi: { adhan: true, reminder: true },
-  aksam: { adhan: true, reminder: true },
-  yatsi: { adhan: true, reminder: true },
+  imsak: { adhan: true },
+  gunes: { adhan: false }, // Güneş vaktinde ezan/hatırlatıcı olmaz
+  ogle: { adhan: true },
+  ikindi: { adhan: true },
+  aksam: { adhan: true },
+  yatsi: { adhan: true },
 };
 
 export const SETTINGS_KEY = '@prayer_settings';
@@ -107,7 +107,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// BİLDİRİM FONKSİYONU (DÜZELTİLMİŞ MANTIK)
+// BİLDİRİM FONKSİYONU 
 async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
   const { status } = await Notifications.requestPermissionsAsync();
   if (status !== 'granted') {
@@ -115,27 +115,22 @@ async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
     return;
   }
 
-  // Android'de Bildirim Kanalı Tanımlama (Zorunlu)
+  // Android'de Bildirim Kanalı Tanımlama (Sadece ezan kanalı kaldı)
   if (Platform.OS === 'android') {
+    // Önemli: Expo CLI, 'adhan.wav' ses dosyasını app.json'daki
+    // "sounds" dizisine eklediğiniz için Android'de bu kanal üzerinden
+    // özel sesi çalabilmelidir.
     await Notifications.setNotificationChannelAsync('prayer_times', {
       name: 'Namaz Vakitleri',
       importance: Notifications.AndroidImportance.HIGH,
       sound: 'adhan.wav', // Özel ezan sesi için kanal ayarı
       vibrationPattern: [0, 250, 250, 250],
     });
-    
-    await Notifications.setNotificationChannelAsync('prayer_reminders', {
-      name: 'Namaz Hatırlatıcıları',
-      importance: Notifications.AndroidImportance.DEFAULT,
-      sound: 'default', // Hatırlatıcı için varsayılan ses
-    });
   }
   
   // Önceki tüm bildirimleri iptal et (Her zaman en güncel vakitleri kurmak için)
   await Notifications.cancelAllScheduledNotificationsAsync();
-  console.log('Tüm eski bildirimler iptal edildi.');
-
-  // --- !!! 10 SANİYELİK TEST BİLDİRİMİ KODU KALDIRILDI !!! ---
+  console.log('LOG Tüm eski bildirimler iptal edildi.');
 
   // 1. Kullanıcı ayarlarını çek
   let settings: PrayerSettings = DEFAULT_SETTINGS;
@@ -167,41 +162,15 @@ async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
     // Önce vaktin tarihini BUGÜN olarak ayarla
     let prayerDate = timeToDate(prayer.time);
 
-    // --- KRİTİK DÜZELTME: GEÇMİŞ VAKİT KONTROLÜ ---
-    // Eğer vaktin zamanı (prayerDate) şu anki zamandan (nowTime) önceyse,
-    // bu vakit bugün için geçmiştir. Bildirimi YARIN için kur.
+    // --- KRİTİK KONTROL: GEÇMİŞ VAKİT İÇİN YARINA KUR ---
+    // Eğer vaktin zamanı şu anki zamandan önceyse, bir sonraki güne ayarla.
     if (prayerDate.getTime() <= nowTime) {
       prayerDate = new Date(prayerDate.getTime() + 24 * 60 * 60 * 1000); // 24 saat ekle
     }
-    // --- DÜZELTME SONU ---
+    // --- KONTROL SONU ---
 
-    // Hatırlatıcıyı, (muhtemelen yarının) vaktinden 15 dk önceye ayarla
-    const reminderDate = new Date(prayerDate.getTime() - 15 * 60 * 1000); 
-
-    // 3. Hatırlatıcı Bildirimini Kur
-    // Sadece hatırlatma vakti GELECEKTEYSE kur (ki artık hep gelecekte olacak)
-    if (prayerSetting.reminder && reminderDate.getTime() > nowTime) {
-      try {
-        await Notifications.scheduleNotificationAsync({
-          identifier: `reminder_${prayer.id}`,
-          content: {
-            title: '⏰ Vakit Yaklaşıyor!',
-            body: `${prayer.name} vaktine 15 dakika kaldı.`,
-            sound: 'default', 
-          },
-          trigger: { 
-            date: reminderDate,
-            channelId: 'prayer_reminders',
-          },
-        });
-        console.log(`${prayer.name} için 15dk hatırlatıcı kuruldu: ${reminderDate.toLocaleString('tr-TR')}`);
-      } catch (e) {
-        console.error(`${prayer.name} hatırlatıcısı kurulurken hata:`, e);
-      }
-    }
-
-    // 4. Ezan Vakti Bildirimini Kur
-    // Vakit GELECEKTEYSE (ki artık hep gelecekte) ve ayar açıksa kur.
+    // 3. Ezan Vakti Bildirimini Kur
+    // Sadece gelecek zamana kur. (Bu kontrol, 24 saat ekleme mantığı sayesinde doğru çalışır)
     if (prayerSetting.adhan && prayerDate.getTime() > nowTime) {
       try {
         await Notifications.scheduleNotificationAsync({
@@ -209,16 +178,17 @@ async function scheduleDailyNotifications(prayerTimes: PrayerTimeData) {
           content: {
             title: `🔔 ${prayer.name} Vakti!`,
             body: `${prayer.name} namazı vakti girdi.`,
-            sound: Platform.OS === 'android' ? 'adhan.wav' : 'adhan.wav',
+            // Hem iOS hem Android'de özel ses dosyası adı kullanılır.
+            sound: 'adhan.wav',
           },
           trigger: { 
             date: prayerDate,
-            channelId: 'prayer_times',
+            channelId: 'prayer_times', // Android için özel kanalı kullan
           },
         });
-        console.log(`${prayer.name} için ezan bildirimi kuruldu: ${prayerDate.toLocaleString('tr-TR')}`);
+        console.log(`LOG ${prayer.name} için ezan bildirimi kuruldu: ${prayerDate.toLocaleString('tr-TR')}`);
       } catch (e) {
-        console.error(`${prayer.name} ezan bildirimi kurulurken hata:`, e);
+        console.error(`LOG ${prayer.name} ezan bildirimi kurulurken hata:`, e);
       }
     }
   }
@@ -243,6 +213,10 @@ export default function HomeScreen() {
   const borderColor = useThemeColor({}, 'border');
   const mainAccentColor = useThemeColor({}, 'tint');
 
+  // YENİ REF: Son başarılı şekilde bildirimi kurulan verinin JSON stringini tutar.
+  // JSON.stringify ile derin karşılaştırma yaparak gereksiz tetiklenmeyi kesin olarak engeller.
+  const lastScheduledTimesJsonRef = useRef<string | null>(null);
+
   useFocusEffect(
     React.useCallback(() => {
       checkLocationAndFetchTimes();
@@ -252,9 +226,20 @@ export default function HomeScreen() {
   // Bildirimleri [times] değiştiğinde (yani vakitler çekildiğinde) kur
   useEffect(() => {
     if (times) {
-      // Bu log SADECE API'den yeni veri çekilirse (günde 1 kez) çalışacak.
-      console.log("Vakitler güncellendi, bildirimler yeniden kurulacak.");
-      scheduleDailyNotifications(times);
+      const currentTimesJson = JSON.stringify(times);
+      const lastScheduledTimesJson = lastScheduledTimesJsonRef.current;
+      
+      // JSON stringleri ile karşılaştırma yaparak nesne içeriğinin değişip değişmediğini kontrol et.
+      if (currentTimesJson !== lastScheduledTimesJson) {
+        console.log("LOG Vakitler güncellendi, bildirimler yeniden kurulacak.");
+        scheduleDailyNotifications(times);
+        
+        // Başarılı bir şekilde kurduktan sonra referansı güncelle
+        lastScheduledTimesJsonRef.current = currentTimesJson;
+      } else {
+        // Bu log, sadece yeniden odaklanma durumunda gereksiz kurma işleminin atlandığını gösterir
+        console.log("LOG Vakitler zaten kurulu (içerik değişmedi), bildirim kurma atlandı.");
+      }
     }
   }, [times]);
   
@@ -357,14 +342,11 @@ export default function HomeScreen() {
       if (cachedDataJson) {
         const cachedData: CachedPrayerData = JSON.parse(cachedDataJson);
         
-        // --- DÜZELTME: CACHE KONTROLÜ AÇILDI ---
         // Veri hafızada varsa, bugüne aitse ve konum aynıysa, API'ye gitme.
         if (cachedData.fetchDate === TODAY_DATE && cachedData.locationId === location.id) {
           console.log('Veri hafızadan (cache) yüklendi.');
           
           // 'times' state'i henüz ayarlanmamışsa ayarla (uygulama ilk açılışı)
-          // Bu, setTimes -> useEffect[times] -> scheduleNotifications tetiklemesini
-          // sadece bir kez (ilk yüklemede) yapar.
           if (!times) { 
              processApiData(cachedData.monthlyTimes, location.id); 
           } else {
@@ -373,7 +355,6 @@ export default function HomeScreen() {
           }
           return; // API'ye gitmeyi durdur
         }
-        // --- DÜZELTME SONU ---
       }
 
       console.log('Veri API\'den çekiliyor...');
@@ -430,7 +411,7 @@ export default function HomeScreen() {
         (day: any) => day.date && day.date.startsWith(TODAY_DATE)
       );
 
-      // --- HATA AYIKLAMA (API GELECEK TARİHİNİ DESTEKLEMİYORSA) ---
+      // --- HATA AYIKLAMA (API GELECEK TARİHİNİ DESTEKLEMİYorsa) ---
       // Eğer bugünün verisi bulunamazsa, API'den gelen ilk günü kullan
       if (!todayTimes) {
         console.warn(`Bugünün tarihi (${TODAY_DATE}) için veri bulunamadı.`);
