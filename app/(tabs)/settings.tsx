@@ -7,7 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
-// Bu tip, index.tsx'teki DEFAULT_SETTINGS ile eşleşmelidir.
+// Bu tip, index.tsx'teki DEFAULT_SETTINGS ile eşleşmelidir. (Eski haline getirildi)
 export interface PrayerSettings {
   imsak: { adhan: boolean; reminder: boolean };
   gunes: { adhan: boolean; reminder: boolean };
@@ -30,7 +30,7 @@ const PRAYER_KEYS: Array<{ key: keyof PrayerSettings; name: string }> = [
 
 export const SETTINGS_KEY = '@prayer_settings';
 
-// Varsayılan ayarlar (index.tsx'teki ile aynı)
+// Varsayılan ayarlar (index.tsx'teki ile aynı) (Eski haline getirildi)
 export const DEFAULT_SETTINGS: PrayerSettings = {
   imsak: { adhan: true, reminder: true },
   gunes: { adhan: false, reminder: false },
@@ -54,7 +54,16 @@ export default function SettingsScreen() {
       try {
         const settingsJson = await AsyncStorage.getItem(SETTINGS_KEY);
         if (settingsJson) {
-          setSettings(JSON.parse(settingsJson));
+          // Gelen ayar eksikse (örn: reminder yoksa) varsayılanla birleştir
+          const parsedSettings = JSON.parse(settingsJson);
+          const mergedSettings = { ...DEFAULT_SETTINGS };
+          for (const key of PRAYER_KEYS) {
+            mergedSettings[key.key] = {
+              adhan: parsedSettings[key.key]?.adhan ?? DEFAULT_SETTINGS[key.key].adhan,
+              reminder: parsedSettings[key.key]?.reminder ?? DEFAULT_SETTINGS[key.key].reminder,
+            };
+          }
+          setSettings(mergedSettings);
         } else {
           setSettings(DEFAULT_SETTINGS); // İlk açılışta varsayılanları ata
         }
@@ -68,7 +77,7 @@ export default function SettingsScreen() {
     loadSettings();
   }, []);
 
-  // Ayarları Güncelle ve Kaydet
+  // Ayarları Güncelle ve Kaydet (Eski haline getirildi)
   const updateSetting = (
     prayer: keyof PrayerSettings,
     type: 'adhan' | 'reminder',
@@ -124,7 +133,7 @@ export default function SettingsScreen() {
               />
             </View>
 
-            {/* Hatırlatıcı Ayarı */}
+            {/* Hatırlatıcı Ayarı (GERİ GETİRİLDİ) */}
             <View style={styles.settingRow}>
               <ThemedText style={styles.settingText}>Hatırlatıcı (15 Dk Önce)</ThemedText>
               <Switch
