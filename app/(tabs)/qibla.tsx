@@ -1,15 +1,16 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import * as KeepAwake from 'expo-keep-awake'; // <<< YENİ IMPORT EKLENDİ >>>
 import * as Location from 'expo-location';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Dimensions, Animated as RNAnimated, StyleSheet, View } from 'react-native';
 import Animated, {
-    Extrapolate,
-    interpolate,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
-    withTiming
+  Extrapolate,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming
 } from 'react-native-reanimated';
 
 const { width, height } = Dimensions.get('window');
@@ -86,13 +87,40 @@ export default function QiblaScreen() {
     }
   }, [qiblaDirection, calibrationComplete]);
 
+  // <<< KeepAwake Hata Yönetimi ve Uygulama >>>
+  // Bu fonksiyonlar, asenkron çağrıları try/catch ile sarmalayarak 
+  // "uncaught in promise" hatasını önler.
+  const activateKeepAwake = async () => {
+    try {
+      await KeepAwake.activateKeepAwake();
+    } catch (e) {
+      // Hata oluşsa bile uygulamanın çökmesini önler.
+      console.warn('KeepAwake aktivasyonu başarısız:', e);
+    }
+  };
+
+  const deactivateKeepAwake = async () => {
+    try {
+      await KeepAwake.deactivateKeepAwake();
+    } catch (e) {
+      // Hata oluşsa bile uygulamanın çökmesini önler.
+      console.warn('KeepAwake de-aktivasyonu başarısız:', e);
+    }
+  };
+  // <<< KeepAwake Hata Yönetimi ve Uygulama Sonu >>>
+
   useEffect(() => {
     let compassSubscription: Location.LocationSubscription | undefined;
 
     (async () => {
+      // Kıble pusulası ekranındayken ekranın kapanmasını engelle
+      await activateKeepAwake();
+
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setErrorMsg('Pusula ve Kıble yönü için konum izni gerekli.');
+        // Hata durumunda KeepAwake'i kapat
+        await deactivateKeepAwake();
         return;
       }
 
@@ -116,6 +144,8 @@ export default function QiblaScreen() {
       } catch (e) {
          console.error(e);
          setErrorMsg("Konum alınamadı veya pusula başlatılamadı.");
+         // Hata durumunda KeepAwake'i kapat
+         await deactivateKeepAwake();
       }
     })();
 
@@ -123,6 +153,8 @@ export default function QiblaScreen() {
       if (compassSubscription) {
         compassSubscription.remove();
       }
+      // Component unmount olduğunda ekranı açık tutmayı kapat
+      deactivateKeepAwake();
     };
   }, []);
 
@@ -387,8 +419,7 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   
   const a = 
     Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2);
+    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
   
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return R * c;
