@@ -8,56 +8,50 @@
     "scheme": "vakitrehberi",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.VakitRehberi",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
         ]
       }
     },
+
     "android": {
-      "package": "com.anonymous.VakitRehberi",
       "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
-        "backgroundColor": "#E6F4FE",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.VakitRehberi",
+
       "permissions": [
-        "SCHEDULE_EXACT_ALARM",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "SCHEDULE_EXACT_ALARM"
       ]
     },
+
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "sounds": ["./assets/sounds/adhan.wav"]
+        }
+      ]
+    ],
+
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-    "plugins": [
-      "expo-router",
-      [
-        "expo-notifications",
-        {
-          "defaultChannel": "adhan_channel_v1",
-          "sounds": [
-            "./assets/sounds/adhan.mp3"
-          ]
-        }
-      ],
-      "expo-asset"
-    ],
+
     "experiments": {
       "typedRoutes": true
-    },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "0a75cac2-3629-4aec-9452-85e142537280"
-      }
     }
   }
 }
