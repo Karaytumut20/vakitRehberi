@@ -1,57 +1,96 @@
 // lib/notifications.ts
+
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-const CHANNEL_ID = 'prayer_times_adhan_v1';
+// Android notification channel & sound
+const ANDROID_CHANNEL_ID = 'prayer_times_adhan_v1';
+const ANDROID_SOUND_NAME = 'adhan.wav';
 
-// --- 1) Bildirim Handler ---
+// --------------------------------------------------
+// Global notification handler
+// --------------------------------------------------
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,       // Bildirim görünsün
-    shouldPlaySound: true,       // Ses çalsın
-    shouldSetBadge: false,       // iOS badge yok
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
   }),
 });
 
-// --- 2) İzin iste & Android kanalı oluştur ---
-export async function setupNotifications() {
-  const { status: existingStatus } =
-    await Notifications.getPermissionsAsync();
+// --------------------------------------------------
+// Bildirim izinlerini iste + Android kanalını oluştur
+// --------------------------------------------------
+export async function setupNotifications(): Promise<boolean> {
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
 
-  let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
 
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
+    if (finalStatus !== 'granted') {
+      console.log('Notification permission not granted.');
+      return false;
+    }
 
-  if (finalStatus !== 'granted') {
-    console.warn('Bildirim izni reddedildi');
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+        name: 'Ezan Notifications',
+        importance: Notifications.AndroidImportance.MAX,
+        sound: ANDROID_SOUND_NAME,
+        vibrationPattern: [200, 100, 200],
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+    }
+
+    return true;
+  } catch (error) {
+    console.log('setupNotifications error:', error);
     return false;
   }
-
-  // Android için özel kanal — ezan sesi çalması için şart
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-      name: 'Adhan Channel',
-      importance: 5,          // MAX önem — ses garanti çalar
-      sound: 'adhan.wav',     // android/app/src/main/res/raw/
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#ffffff',
-    });
-  }
-
-  return true;
 }
 
-// --- 3) Test için alarm ---
-export async function testAdhanNow() {
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: '📿 Test Ezan',
-      body: 'Ezan sesi test ediliyor.',
-      sound: 'adhan.wav',
-    },
-    trigger: null, // Hemen çalışır
-  });
+// --------------------------------------------------
+// Tüm eski planlanmış bildirimleri temizler
+// --------------------------------------------------
+export async function clearAllScheduledNotifications() {
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    console.log('All scheduled notifications cancelled.');
+  } catch (error) {
+    console.log('clearAllScheduledNotifications error:', error);
+  }
+}
+
+// --------------------------------------------------
+// Saniye bazlı ezan bildirimi planlar
+// --------------------------------------------------
+export async function scheduleAdhanNotificationInSeconds(
+  seconds: number,
+  prayerName: string
+): Promise<void> {
+  try {
+    console.log(
+      `Scheduling "${prayerName}" in ${seconds} seconds at`,
+      new Date(Date.now() + seconds * 1000).toISOString()
+    );
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Vakit Rehberi',
+        body: `${prayerName} vaktine ulaşıldı`,
+        sound: ANDROID_SOUND_NAME,
+      },
+      trigger: {
+        seconds,
+        channelId: ANDROID_CHANNEL_ID,
+        repeats: false,
+      },
+    });
+  } catch (error) {
+    console.log('scheduleAdhanNotificationInSeconds error:', error);
+  }
 }
