@@ -92,16 +92,15 @@ export const SETTINGS_KEY = '@prayer_settings';
  * --- Bildirim / Ses Sabitleri ---
  */
 
-const ANDROID_CHANNEL_ID = 'adhan_channel_v1'; // app.json ile uyumlu
+const ANDROID_CHANNEL_ID = 'adhan_channel_v1'; // app.json ile uyumlu olmalı
 
-// Notification tarafında kullanılacak ses adı (uzantısız)
-const NOTIFICATION_SOUND_NAME = 'adhan';
+// Notification tarafında kullanılacak ses adı (dosya ismi)
+const NOTIFICATION_SOUND_NAME = 'adhan.wav';
 
 // Uygulama içi player için dosya referansı
-const ADHAN_REQUIRE = require('../../assets/sounds/adhan.mp3');
+const ADHAN_REQUIRE = require('../../assets/sounds/adhan.wav');
 
 const SCHEDULED_HASH_KEY = '@prayer_scheduled_hash';
-const SAFE_WINDOW_MS = 30_000;
 
 /**
  * --- Yardımcı Fonksiyonlar ---
@@ -129,23 +128,25 @@ function timeToDateBase(timeString: string): Date {
 
   const [h, m] = t.split(':').map(Number);
   const d = new Date();
-  d.setHours(h, m, 0, 0);
+  d.setHours(h || 0, m || 0, 0, 0);
   return d;
 }
 
+/**
+ * Verilen saat bugün geçtiyse -> ertesi gün aynı saate kaydır.
+ * Gelecekteyse -> bugün o saat.
+ */
 function safeTimeToFutureDate(
   timeString: string,
   now: Date = new Date()
 ): Date {
   const candidate = timeToDateBase(timeString);
-  const diff = candidate.getTime() - now.getTime();
-
-  if (diff > SAFE_WINDOW_MS) {
-    return candidate;
+  if (candidate.getTime() <= now.getTime()) {
+    // Geçtiyse ertesi güne al
+    return new Date(candidate.getTime() + 24 * 60 * 60 * 1000);
   }
-
-  // Aynı vakit bir gün sonrasına taşınır
-  return new Date(candidate.getTime() + 24 * 60 * 60 * 1000);
+  // Henüz gelmemişse bugüne schedule et
+  return candidate;
 }
 
 function formatTimeRemaining(ms: number): string {
@@ -173,11 +174,7 @@ function setForegroundAlerts(enabled: boolean) {
       };
 
       if (Platform.OS === 'ios') {
-        behavior.shouldShowBanner = enabled;
-      }
-
-      if (Platform.OS === 'android') {
-        behavior.priority = Notifications.AndroidNotificationPriority.HIGH;
+        (behavior as any).shouldShowBanner = enabled;
       }
 
       return behavior as Notifications.NotificationBehavior;
@@ -243,6 +240,12 @@ function buildSchedulePayload(
       name: 'İmsak',
       time: times.imsak,
       enabled: settings.imsak.adhan,
+    },
+    {
+      key: 'gunes',
+      name: 'Güneş',
+      time: times.gunes,
+      enabled: settings.gunes.adhan,
     },
     {
       key: 'ogle',
@@ -324,7 +327,7 @@ async function scheduleDailyNotifications(
       content: {
         title: `${p.name} Vakti!`,
         body: `${p.name} vakti girdi.`,
-        // OS tarafında çalacak ezan sesi (app.json -> sounds)
+        // OS tarafında çalacak ezan sesi (app.json -> sounds ile uyumlu)
         sound: withSound ? (NOTIFICATION_SOUND_NAME as any) : undefined,
       },
       trigger: {
@@ -458,6 +461,8 @@ export default function HomeScreen() {
       for (const p of list) {
         const date = safeTimeToFutureDate(p.time, now);
         const ms = date.getTime() - now.getTime();
+
+        if (ms <= 0) continue; // geçmişse timer kurma
 
         const id = setTimeout(() => {
           playAdhan();

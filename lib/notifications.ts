@@ -4,18 +4,26 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 const ANDROID_CHANNEL_ID = 'prayer_times_adhan_v1'; // Kanal ID
-const ADHAN_SOUND_FILENAME = 'adhan.wav';           // Sadece dosya adı
+const ADHAN_SOUND_FILENAME = 'adhan.wav';           // Sadece dosya adı (app.json -> sounds ile aynı)
 
-// 🔔 1) Bildirim handler – Uygulama açıksa da ses + alert gözüksün
+/**
+ * 1) Bildirim handler – Uygulama açıksa da ses + alert gözüksün
+ * (TS hatasını çözmek için shouldShowBanner ve shouldShowList alanlarını da ekliyoruz)
+ */
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
+  handleNotification: async (): Promise<Notifications.NotificationBehavior> => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
-    shouldSetBadge: false
-  })
+    shouldSetBadge: false,
+    // Yeni tip alanları (özellikle iOS için):
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
 });
 
-// 🔧 2) İzin iste + Android için kanal oluştur
+/**
+ * 2) İzin iste + Android için kanal oluştur
+ */
 export async function setupNotifications() {
   try {
     // 1) İzinleri kontrol et
@@ -40,7 +48,8 @@ export async function setupNotifications() {
         sound: ADHAN_SOUND_FILENAME, // app.json -> sounds ile eşleşiyor
         enableVibrate: true,
         vibrationPattern: [0, 500, 500, 500],
-        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC
+        lockscreenVisibility:
+          Notifications.AndroidNotificationVisibility.PUBLIC,
       });
     }
 
@@ -51,8 +60,16 @@ export async function setupNotifications() {
   }
 }
 
-// Namaz vakti tipleri
-export type PrayerKey = 'imsak' | 'gunes' | 'ogle' | 'ikindi' | 'aksam' | 'yatsi';
+/**
+ * Namaz vakti tipleri
+ */
+export type PrayerKey =
+  | 'imsak'
+  | 'gunes'
+  | 'ogle'
+  | 'ikindi'
+  | 'aksam'
+  | 'yatsi';
 
 export interface PrayerTimeMap {
   imsak: string;
@@ -63,7 +80,10 @@ export interface PrayerTimeMap {
   yatsi: string;
 }
 
-// Verilen "HH:mm" saati için bugün Date üret (eğer geçmişse: yarına atma, bugünkü için test)
+/**
+ * Verilen "HH:mm" saati için bugün Date üret
+ * Geçmişse: test amaçlı 1 dakika ileriye atıyoruz
+ */
 function makeTodayDateFromTime(time: string): Date | null {
   const [hh, mm] = time.split(':').map(Number);
   if (Number.isNaN(hh) || Number.isNaN(mm)) return null;
@@ -90,7 +110,9 @@ function makeTodayDateFromTime(time: string): Date | null {
   return d;
 }
 
-// 🕌 3) Tek bir namaz için bildirim planla
+/**
+ * 3) Tek bir namaz için bildirim planla
+ */
 export async function scheduleSinglePrayerNotification(
   key: PrayerKey,
   time: string,
@@ -108,27 +130,29 @@ export async function scheduleSinglePrayerNotification(
     ogle: 'Öğle Vakti',
     ikindi: 'İkindi Vakti',
     aksam: 'Akşam Vakti',
-    yatsi: 'Yatsı Vakti'
+    yatsi: 'Yatsı Vakti',
   };
 
   await Notifications.scheduleNotificationAsync({
     content: {
       title: titleMap[key] ?? 'Namaz Vakti',
       body: `${titleMap[key] ?? 'Namaz'} vakti girdi.`,
-      sound: withSound ? ADHAN_SOUND_FILENAME : undefined
+      sound: withSound ? ADHAN_SOUND_FILENAME : undefined,
     },
     trigger: {
       date,
       ...(Platform.OS === 'android'
         ? ({ channelId: ANDROID_CHANNEL_ID } as any)
-        : {})
-    }
+        : {}),
+    },
   });
 
   console.log('📅 Bildirim planlandı:', key, time, date.toString());
 }
 
-// 🔁 4) Gün içindeki tüm namazlar için bildirim planla
+/**
+ * 4) Gün içindeki tüm namazlar için bildirim planla
+ */
 export async function scheduleAllPrayerNotifications(
   times: PrayerTimeMap,
   enabledMap: Partial<Record<PrayerKey, boolean>>
@@ -142,7 +166,7 @@ export async function scheduleAllPrayerNotifications(
     'ogle',
     'ikindi',
     'aksam',
-    'yatsi'
+    'yatsi',
   ];
 
   for (const key of keys) {
@@ -156,7 +180,9 @@ export async function scheduleAllPrayerNotifications(
   }
 }
 
-// 🧪 5) Test için: 30 saniye sonrasına ezan sesli bildirim kur
+/**
+ * 5) Test için: 30 saniye sonrasına ezan sesli bildirim kur
+ */
 export async function scheduleTestNotification(secondsFromNow = 30) {
   const now = Date.now();
   const date = new Date(now + secondsFromNow * 1000);
@@ -165,14 +191,14 @@ export async function scheduleTestNotification(secondsFromNow = 30) {
     content: {
       title: 'Test Ezan Bildirimi',
       body: 'Bu bir test bildirimi. Ezan sesi geliyorsa sistem çalışıyor.',
-      sound: ADHAN_SOUND_FILENAME
+      sound: ADHAN_SOUND_FILENAME,
     },
     trigger: {
       date,
       ...(Platform.OS === 'android'
         ? ({ channelId: ANDROID_CHANNEL_ID } as any)
-        : {})
-    }
+        : {}),
+    },
   });
 
   console.log('🧪 Test bildirimi planlandı:', date.toString());
