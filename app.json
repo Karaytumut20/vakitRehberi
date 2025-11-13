@@ -8,20 +8,15 @@
     "scheme": "vakitrehberi",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
-    // iOS ayarları
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.VakitRehberi",
       "infoPlist": {
-        // Arka planda remote notification izni
         "UIBackgroundModes": [
           "remote-notification"
         ]
       }
     },
-
-    // Android ayarları
     "android": {
       "package": "com.anonymous.VakitRehberi",
       "adaptiveIcon": {
@@ -37,37 +32,32 @@
         "POST_NOTIFICATIONS"
       ]
     },
-
-    // Web ayarları (default Expo ayarları)
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-
-    // KULLANDIĞIMIZ PLUGINLER
     "plugins": [
-      // Expo Router ile dosya tabanlı routing
       "expo-router",
-
-      // Ezan bildirimleri için expo-notifications
       [
         "expo-notifications",
         {
-          // index.tsx içinde kullandığımız kanal ID'si
           "defaultChannel": "adhan_channel_v1",
-
-          // Paketlenecek ses dosyası (path gerçek olmalı!)
           "sounds": [
             "./assets/sounds/adhan.mp3"
           ]
         }
-      ]
+      ],
+      "expo-asset"
     ],
-
-    // Typed routes vs. için (Expo Router default)
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0a75cac2-3629-4aec-9452-85e142537280"
+      }
     }
   }
 }
