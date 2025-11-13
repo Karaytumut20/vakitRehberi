@@ -2,7 +2,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import * as KeepAwake from 'expo-keep-awake'; // <<< YENİ IMPORT EKLENDİ >>>
 import * as Location from 'expo-location';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Dimensions, Animated as RNAnimated, StyleSheet, View } from 'react-native';
 import Animated, {
   Extrapolate,
@@ -389,22 +389,7 @@ export default function QiblaScreen() {
             </Animated.View>
           </View>
           
-          <View style={styles.locationInfo}>
-            <ThemedText style={styles.locationText}>
-              Konum: {userLocation ? 
-                `${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}` : 
-                'Belirleniyor...'}
-            </ThemedText>
-            <ThemedText style={styles.distanceText}>
-              Kabe'ye uzaklık: ~{userLocation ? 
-                calculateDistance(
-                  userLocation.latitude, 
-                  userLocation.longitude, 
-                  KAABA_LATITUDE, 
-                  KAABA_LONGITUDE
-                ).toFixed(0) : '0'} km
-            </ThemedText>
-          </View>
+          
         </>
       )}
     </ThemedView>

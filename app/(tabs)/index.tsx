@@ -9,7 +9,6 @@ import {
   useState,
 } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Platform,
   ScrollView,
@@ -17,7 +16,7 @@ import {
   StyleSheet,
   TextStyle,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -143,10 +142,8 @@ function safeTimeToFutureDate(
 ): Date {
   const candidate = timeToDateBase(timeString);
   if (candidate.getTime() <= now.getTime()) {
-    // Geçtiyse ertesi güne al
     return new Date(candidate.getTime() + 24 * 60 * 60 * 1000);
   }
-  // Henüz gelmemişse bugüne schedule et
   return candidate;
 }
 
@@ -183,12 +180,8 @@ function setForegroundAlerts(enabled: boolean) {
   });
 }
 
-// Uygulama ön plandayken klasik push popup istemiyoruz
 setForegroundAlerts(false);
 
-/**
- * AsyncStorage üzerindeki PrayerSettings verisini DEFAULT_SETTINGS ile merge eder.
- */
 async function getMergedSettings(): Promise<PrayerSettings> {
   try {
     const saved = await AsyncStorage.getItem(SETTINGS_KEY);
@@ -212,10 +205,6 @@ async function getMergedSettings(): Promise<PrayerSettings> {
   }
 }
 
-/**
- * Schedule edilecek vakitlerin listesi ve hash'i
- */
-
 interface ScheduleItem {
   key: keyof PrayerSettings;
   name: PrayerName;
@@ -228,9 +217,6 @@ interface SchedulePayload {
   hash: string;
 }
 
-/**
- * Settings ve times'a göre sadece aktif ezan okunacak vakitleri döndürür.
- */
 function buildSchedulePayload(
   times: PrayerTimeData,
   settings: PrayerSettings
@@ -285,10 +271,6 @@ function buildSchedulePayload(
   return { list, hash };
 }
 
-/**
- * --- Bildirim Fallback ---
- * App arka planda / kapalıyken OS tarafında ezan sesini çaldırır.
- */
 async function scheduleDailyNotifications(
   prayerTimes: PrayerTimeData,
   withSound: boolean = true
@@ -328,7 +310,6 @@ async function scheduleDailyNotifications(
       content: {
         title: `${p.name} Vakti!`,
         body: `${p.name} vakti girdi.`,
-        // OS tarafında çalacak ezan sesi (app.json -> sounds ile uyumlu)
         sound: withSound ? (NOTIFICATION_SOUND_NAME as any) : undefined,
       },
       trigger: {
@@ -347,10 +328,6 @@ async function scheduleDailyNotifications(
   await AsyncStorage.setItem(SCHEDULED_HASH_KEY, hash);
 }
 
-/**
- * --- Audio Mode ---
- */
-
 let audioModeConfigured = false;
 
 async function ensureAudioModeOnce(): Promise<void> {
@@ -365,10 +342,6 @@ async function ensureAudioModeOnce(): Promise<void> {
     console.warn('setAudioModeAsync error:', e);
   }
 }
-
-/**
- * --- Android Notification Channel Kurulumu ---
- */
 
 function useSetupAndroidNotificationChannel() {
   useEffect(() => {
@@ -404,7 +377,7 @@ export default function HomeScreen() {
     useState<LocationData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [testing, setTesting] = useState<boolean>(false);
+  const [testing] = useState<boolean>(false);
 
   const [currentPrayer, setCurrentPrayer] = useState<PrayerName | null>(null);
   const [nextPrayer, setNextPrayer] = useState<PrayerName | null>(null);
@@ -444,9 +417,6 @@ export default function HomeScreen() {
     [adhanPlayer]
   );
 
-  /**
-   * Uygulama ön plandayken: setTimeout ile gerçek ezan sesini çalar
-   */
   useEffect(() => {
     if (!times) return;
 
@@ -463,7 +433,7 @@ export default function HomeScreen() {
         const date = safeTimeToFutureDate(p.time, now);
         const ms = date.getTime() - now.getTime();
 
-        if (ms <= 0) continue; // geçmişse timer kurma
+        if (ms <= 0) continue;
 
         const id = setTimeout(() => {
           playAdhan();
@@ -485,9 +455,6 @@ export default function HomeScreen() {
     };
   }, [times, playAdhan]);
 
-  /**
-   * App arka plan / kapalıyken: scheduleDailyNotifications
-   */
   useEffect(() => {
     if (!times) return;
 
@@ -619,9 +586,6 @@ export default function HomeScreen() {
     }
   }
 
-  /**
-   * Geri sayım / şu anki ve sonraki vakit
-   */
   useEffect(() => {
     if (!times) return;
 
@@ -692,31 +656,6 @@ export default function HomeScreen() {
 
     return () => clearInterval(intervalId);
   }, [times]);
-
-  async function triggerAdhanTest() {
-    try {
-      setTesting(true);
-      await playAdhan();
-    } catch (e) {
-      console.error('Test çalma hatası:', e);
-    } finally {
-      setTesting(false);
-    }
-  }
-
-  if (loading) {
-    return (
-      <SafeAreaView style={{ flex: 1 }}>
-        <StatusBar
-          barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
-        />
-        <ThemedView style={styles.centeredContainer}>
-          <ActivityIndicator size="large" color={mainAccentColor} />
-          <ThemedText style={styles.loadingText}>Yükleniyor...</ThemedText>
-        </ThemedView>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
@@ -863,30 +802,7 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Test & Ayarlar butonları */}
-          <View style={styles.actionsRow}>
-            <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                { backgroundColor: mainAccentColor },
-              ]}
-              onPress={triggerAdhanTest}
-              disabled={testing}
-            >
-              <ThemedText style={styles.primaryButtonText}>
-                {testing ? 'Test Ediliyor...' : 'Ezan Sesini Test Et'}
-              </ThemedText>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.secondaryButton, { borderColor: borderColor }]}
-              onPress={() => router.push('/settings')}
-            >
-              <ThemedText style={styles.secondaryButtonText}>
-                Ayarlar
-              </ThemedText>
-            </TouchableOpacity>
-          </View>
+          {/* TEST VE AYARLAR BUTONLARI KALDIRILDI */}
         </ScrollView>
 
         {/* ALT BANNER */}
@@ -910,9 +826,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 24,
+    paddingTop: 30,
+    paddingBottom: 104,
     gap: 16,
+    
   },
   centeredContainer: {
     flex: 1,
