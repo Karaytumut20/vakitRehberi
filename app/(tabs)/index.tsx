@@ -1,5 +1,6 @@
 // app/(tabs)/index.tsx
 
+import AdmobBanner from '@/components/AdmobBanner';
 import {
   useCallback,
   useEffect,
@@ -647,6 +648,8 @@ export default function HomeScreen() {
           time: prayerDateTimes[name],
           isNextDay: false,
         })),
+
+
         {
           name: 'İmsak' as PrayerName,
           time: new Date(
@@ -749,6 +752,9 @@ export default function HomeScreen() {
               </ThemedText>
             </TouchableOpacity>
           </View>
+
+          {/* 🎯 İLK BANNER: Başlığın hemen altında */}
+          <AdmobBanner />
 
           {/* Hata Kutusu */}
           {error && (
@@ -873,6 +879,11 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </ScrollView>
+
+        {/* 🎯 İKİNCİ BANNER: Sayfanın en altında sabit */}
+        <View style={styles.bottomBannerWrapper}>
+          <AdmobBanner />
+        </View>
       </ThemedView>
     </SafeAreaView>
   );
@@ -889,7 +900,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 32,
+    paddingBottom: 48, // alttaki banner üstüne içerik gelmesin diye biraz boşluk
     gap: 16,
   },
   centeredContainer: {
@@ -1036,4 +1047,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   } as TextStyle,
+
+  // 🔻 Alt sabit banner stili
+  bottomBannerWrapper: {
+    borderTopWidth: 0.5,
+    borderColor: '#ccc',
+    paddingBottom: 4,
+  },
 });

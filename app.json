@@ -11,9 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "UIBackgroundModes": [
-          "remote-notification"
-        ]
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {
@@ -37,9 +35,7 @@
       [
         "expo-notifications",
         {
-          "sounds": [
-            "./assets/sounds/adhan.wav"
-          ]
+          "sounds": ["./assets/sounds/adhan.wav"]
         }
       ],
       "expo-asset",
@@ -58,5 +54,9 @@
         "projectId": "0a75cac2-3629-4aec-9452-85e142537280"
       }
     }
+  },
+
+  "react-native-google-mobile-ads": {
+    "android_app_id": "ca-app-pub-3940256099942544~3347511713"
   }
 }
