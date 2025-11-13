@@ -8,7 +8,6 @@ import {
   useState
 } from 'react';
 import {
-  Alert,
   Platform,
   ScrollView,
   StatusBar,
@@ -322,24 +321,6 @@ async function scheduleDailyNotifications(
   // Alert.alert('Bilgi', 'Bildirimler güncellendi.');
 }
 
-// Test bildirimi gönderme fonksiyonu
-async function sendTestNotification() {
-  const { status } = await Notifications.getPermissionsAsync();
-  if (status !== 'granted') {
-    Alert.alert('Hata', 'Bildirim izni yok!');
-    return;
-  }
-
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: "Test Bildirimi",
-      body: "Bu bir test bildirimidir. Ses ve titreşim kontrolü.",
-      sound: 'default',
-    },
-    trigger: null, // Hemen gönder
-  });
-}
-
 function useSetupAndroidNotificationChannel() {
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -629,15 +610,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* --- YENİ TEST BUTONU --- */}
-          <TouchableOpacity
-            style={[styles.testButton, { backgroundColor: mainAccentColor }]}
-            onPress={sendTestNotification}
-          >
-            <ThemedText style={styles.testButtonText}>🔔 Test Bildirimi Gönder</ThemedText>
-          </TouchableOpacity>
-          {/* ----------------------- */}
-
           {error && (
             <View style={styles.errorBox}>
               <ThemedText style={styles.errorText}>{error}</ThemedText>
@@ -789,19 +761,6 @@ const styles = StyleSheet.create({
   locationButtonText: {
     fontSize: 13,
     fontWeight: '500',
-  } as TextStyle,
-  // Yeni Test Butonu Stili
-  testButton: {
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  testButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 14,
   } as TextStyle,
   errorBox: {
     padding: 12,

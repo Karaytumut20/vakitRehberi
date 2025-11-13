@@ -35,7 +35,7 @@ export default function TabLayout() {
             position: 'absolute',
             left: 0,
             right: 0,
-            bottom: 60, // 🔹 AdMob yüksekliği kadar boşluk
+            bottom: 55, // 🔹 AdMob yüksekliği kadar boşluk
           },
         }}
       >
