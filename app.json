@@ -8,61 +8,64 @@
     "scheme": "vakitrehberi",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+
+    // iOS ayarları
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.VakitRehberi",
       "infoPlist": {
+        // Arka planda remote notification izni
         "UIBackgroundModes": [
           "remote-notification"
         ]
       }
     },
+
+    // Android ayarları
     "android": {
+      "package": "com.anonymous.VakitRehberi",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
+        "backgroundColor": "#E6F4FE",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.VakitRehberi",
       "permissions": [
-        "SCHEDULE_EXACT_ALARM"
+        "SCHEDULE_EXACT_ALARM",
+        "POST_NOTIFICATIONS"
       ]
     },
+
+    // Web ayarları (default Expo ayarları)
     "web": {
+      "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-    "assets": [
-      "./assets/images",
-      "./assets/sounds"
-    ],
+
+    // KULLANDIĞIMIZ PLUGINLER
     "plugins": [
+      // Expo Router ile dosya tabanlı routing
       "expo-router",
+
+      // Ezan bildirimleri için expo-notifications
       [
         "expo-notifications",
         {
-          "defaultChannel": "prayer_times_v3",
+          // index.tsx içinde kullandığımız kanal ID'si
+          "defaultChannel": "adhan_channel_v1",
+
+          // Paketlenecek ses dosyası (path gerçek olmalı!)
           "sounds": [
             "./assets/sounds/adhan.mp3"
           ]
         }
-      ],
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
-        }
-      ],
-      "expo-audio"
+      ]
     ],
+
+    // Typed routes vs. için (Expo Router default)
     "experiments": {
       "typedRoutes": true
     }
