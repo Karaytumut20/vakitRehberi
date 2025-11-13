@@ -8,6 +8,7 @@ import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { MaterialIcons } from '@expo/vector-icons';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -34,7 +35,7 @@ export default function TabLayout() {
             position: 'absolute',
             left: 0,
             right: 0,
-            bottom: 50, // 🔹 AdMob yüksekliği kadar boşluk
+            bottom: 60, // 🔹 AdMob yüksekliği kadar boşluk
           },
         }}
       >
@@ -51,11 +52,11 @@ export default function TabLayout() {
 
         {/* AYLIK TAKVİM */}
         <Tabs.Screen
-          name="monthly"
+          name="explore"
           options={{
             title: 'Aylık Takvim',
             tabBarIcon: ({ color, size }) => (
-              <IconSymbol name="calendar" color={color} size={size} />
+      <MaterialIcons name="date-range" size={size} color={color} />
             ),
           }}
         />
