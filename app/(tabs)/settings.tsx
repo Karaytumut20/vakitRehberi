@@ -1,27 +1,40 @@
 // app/(tabs)/settings.tsx
+
+import AdmobBanner from '@/components/AdmobBanner';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  TextStyle,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
-// Bu tip, index.tsx'teki DEFAULT_SETTINGS ile eşleşmelidir. 
+/**
+ * Index ekranındakiyle birebir aynı tipler ve anahtarlar
+ */
+
 export interface PrayerSettings {
-  imsak: { adhan: boolean; };
-  gunes: { adhan: boolean; };
-  ogle: { adhan: boolean; };
-  ikindi: { adhan: boolean; };
-  aksam: { adhan: boolean; };
-  yatsi: { adhan: boolean; };
+  imsak: { adhan: boolean };
+  gunes: { adhan: boolean };
+  ogle: { adhan: boolean };
+  ikindi: { adhan: boolean };
+  aksam: { adhan: boolean };
+  yatsi: { adhan: boolean };
 }
 
-// Anahtarlar (index.tsx'teki 'id'ler ile aynı olmalı)
+// Anahtarlar (index.tsx'teki id'lerle uyumlu)
 const PRAYER_KEYS: Array<{ key: keyof PrayerSettings; name: string }> = [
   { key: 'imsak', name: 'İmsak' },
-  // Güneş için ayar genellikle olmaz, ancak isterseniz açabilirsiniz
-  // { key: 'gunes', name: 'Güneş' }, 
+  // İstersen burayı açıp Güneş için de ayar ekleyebilirsin
+  // { key: 'gunes', name: 'Güneş' },
   { key: 'ogle', name: 'Öğle' },
   { key: 'ikindi', name: 'İkindi' },
   { key: 'aksam', name: 'Akşam' },
@@ -30,10 +43,10 @@ const PRAYER_KEYS: Array<{ key: keyof PrayerSettings; name: string }> = [
 
 export const SETTINGS_KEY = '@prayer_settings';
 
-// Varsayılan ayarlar (index.tsx'teki ile aynı) 
+// Varsayılan ayarlar (index.tsx ile aynı)
 export const DEFAULT_SETTINGS: PrayerSettings = {
   imsak: { adhan: true },
-  gunes: { adhan: false }, // Güneş için ayar genellikle olmaz, ancak isterseniz açabilirsiniz
+  gunes: { adhan: false }, // Güneş genelde kapalı
   ogle: { adhan: true },
   ikindi: { adhan: true },
   aksam: { adhan: true },
@@ -48,52 +61,63 @@ export default function SettingsScreen() {
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
 
-  // Ayarları Yükle
+  /**
+   * Ayarları AsyncStorage'den yükle ve varsayılanlarla merge et
+   */
   useEffect(() => {
     async function loadSettings() {
       try {
         const settingsJson = await AsyncStorage.getItem(SETTINGS_KEY);
+
         if (settingsJson) {
-          // Gelen ayar eksikse (örn: reminder yoksa) varsayılanla birleştir
           const parsedSettings = JSON.parse(settingsJson);
-          const mergedSettings: PrayerSettings = { ...DEFAULT_SETTINGS };
-          for (const key of PRAYER_KEYS) {
-            mergedSettings[key.key] = {
-              adhan: parsedSettings[key.key]?.adhan ?? DEFAULT_SETTINGS[key.key].adhan,
+
+          const merged: PrayerSettings = { ...DEFAULT_SETTINGS };
+          for (const { key } of PRAYER_KEYS) {
+            merged[key] = {
+              adhan:
+                parsedSettings[key]?.adhan ??
+                DEFAULT_SETTINGS[key].adhan,
             };
           }
-          setSettings(mergedSettings);
+
+          setSettings(merged);
         } else {
-          setSettings(DEFAULT_SETTINGS); // İlk açılışta varsayılanları ata
+          setSettings(DEFAULT_SETTINGS);
         }
       } catch (e) {
-        console.error("Ayarlar yüklenemedi", e);
+        console.error('Ayarlar yüklenemedi', e);
         setSettings(DEFAULT_SETTINGS);
       } finally {
         setLoading(false);
       }
     }
+
     loadSettings();
   }, []);
 
-  // Ayarları Güncelle ve Kaydet 
+  /**
+   * Ayar güncelleme + AsyncStorage'e kaydetme
+   */
   const updateSetting = (
     prayer: keyof PrayerSettings,
-    type: 'adhan', // Sadece 'adhan' kaldı
+    type: 'adhan',
     value: boolean
   ) => {
-    setSettings(prevSettings => {
-      const newSettings = {
-        ...(prevSettings ?? DEFAULT_SETTINGS),
+    setSettings((prev) => {
+      const base = prev ?? DEFAULT_SETTINGS;
+
+      const newSettings: PrayerSettings = {
+        ...base,
         [prayer]: {
-          ...(prevSettings ? prevSettings[prayer] : DEFAULT_SETTINGS[prayer]),
+          ...base[prayer],
           [type]: value,
         },
       };
 
-      // AsyncStorage'ye kaydet (asenkron)
-      AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings))
-        .catch(e => console.error("Ayar kaydedilemedi", e));
+      AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings)).catch(
+        (e) => console.error('Ayar kaydedilemedi', e)
+      );
 
       return newSettings;
     });
@@ -101,86 +125,145 @@ export default function SettingsScreen() {
 
   if (loading || !settings) {
     return (
-      <ThemedView style={styles.center}>
-        <ActivityIndicator size="large" />
-        <ThemedText>Ayarlar Yükleniyor...</ThemedText>
-      </ThemedView>
+      <SafeAreaView style={{ flex: 1 }}>
+        <ThemedView style={styles.center}>
+          <ActivityIndicator size="large" color={tintColor} />
+          <ThemedText style={styles.loadingText}>
+            Ayarlar Yükleniyor...
+          </ThemedText>
+        </ThemedView>
+      </SafeAreaView>
     );
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <ThemedText type="title" style={styles.title}>Bildirim Ayarları</ThemedText>
-        <ThemedText style={styles.subtitle}>
-          Hangi vakitler için ezan sesi almak istersiniz?
-        </ThemedText>
-
-        {PRAYER_KEYS.map(({ key, name }) => (
-          <View key={key} style={[styles.card, { backgroundColor: cardBackgroundColor, borderColor: borderColor }]}>
-            <ThemedText type="subtitle" style={styles.cardTitle}>{name}</ThemedText>
-            
-            {/* Ezan Sesi Ayarı */}
-            <View style={styles.settingRow}>
-              <ThemedText style={styles.settingText}>Ezan Sesi (Vakit Girdiğinde)</ThemedText>
-              <Switch
-                trackColor={{ false: '#767577', true: tintColor }}
-                thumbColor={settings[key].adhan ? '#f4f3f4' : '#f4f3f4'}
-                ios_backgroundColor="#3e3e3e"
-                onValueChange={(value) => updateSetting(key, 'adhan', value)}
-                value={settings[key].adhan}
-              />
-            </View>
+    <SafeAreaView style={{ flex: 1 }}>
+      <ThemedView style={styles.container}>
+        {/* ÜST ADMOB BANNER */}
+        <View style={styles.bannerTopWrapper}>
+          <View style={styles.bannerInner}>
+            <AdmobBanner />
           </View>
-        ))}
-      </ScrollView>
-    </ThemedView>
+        </View>
+
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Başlık */}
+          <ThemedText style={styles.title}>Bildirim Ayarları</ThemedText>
+          <ThemedText style={styles.subtitle}>
+            Hangi vakitler için ezan sesi almak istersiniz?
+          </ThemedText>
+
+          {/* Kart */}
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: cardBackgroundColor, borderColor },
+            ]}
+          >
+            <ThemedText
+              style={[styles.cardTitle, { color: tintColor }]}
+            >
+              Ezan Sesi Tercihleri
+            </ThemedText>
+
+            {PRAYER_KEYS.map(({ key, name }, index) => {
+              const isLast = index === PRAYER_KEYS.length - 1;
+              return (
+                <View
+                  key={key}
+                  style={[
+                    styles.settingRow,
+                    !isLast && {
+                      borderBottomWidth: 1,
+                      borderBottomColor: borderColor,
+                    },
+                  ]}
+                >
+                  <ThemedText style={styles.settingText}>
+                    {name} vaktinde ezan sesi
+                  </ThemedText>
+                  <Switch
+                    value={settings[key].adhan}
+                    onValueChange={(value) =>
+                      updateSetting(key, 'adhan', value)
+                    }
+                    thumbColor={
+                      settings[key].adhan ? tintColor : undefined
+                    }
+                    trackColor={{
+                      false: '#ccc',
+                      true: tintColor,
+                    }}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
+
+        {/* ALT ADMOB BANNER */}
+        <View style={styles.bannerBottomWrapper}>
+          <View style={styles.bannerInner}>
+          </View>
+        </View>
+      </ThemedView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    justifyContent: 'space-between',
   },
   scrollContent: {
-    paddingTop: 80, // Başlık için bolca yer
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingTop: 12,
+    paddingBottom: 24,
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 12,
   },
-  title: {
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  subtitle: {
-    textAlign: 'center',
+  loadingText: {
     fontSize: 16,
+    fontWeight: '500',
+  } as TextStyle,
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 6,
+  } as TextStyle,
+  subtitle: {
+    fontSize: 14,
+    textAlign: 'center',
     color: 'gray',
-    marginBottom: 30,
-  },
-  card: {
-    borderRadius: 15,
-    padding: 20,
     marginBottom: 20,
+  } as TextStyle,
+  card: {
+    borderRadius: 18,
+    padding: 18,
     borderWidth: 1,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
     elevation: 3,
   },
   cardTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '600',
-    marginBottom: 15,
+    marginBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-    paddingBottom: 10,
-  },
+    paddingBottom: 8,
+  } as TextStyle,
   settingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -189,7 +272,23 @@ const styles = StyleSheet.create({
   },
   settingText: {
     fontSize: 16,
-    flex: 1, // Metnin sığmazsa kaymasını sağlar
+    flex: 1,
     marginRight: 10,
+  } as TextStyle,
+  bannerTopWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  bannerBottomWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  bannerInner: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -648,8 +648,6 @@ export default function HomeScreen() {
           time: prayerDateTimes[name],
           isNextDay: false,
         })),
-
-
         {
           name: 'İmsak' as PrayerName,
           time: new Date(
@@ -726,6 +724,13 @@ export default function HomeScreen() {
         barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
       />
       <ThemedView style={styles.container}>
+        {/* ÜST BANNER */}
+        <View style={styles.bannerTopWrapper}>
+          <View style={styles.bannerInner}>
+            <AdmobBanner />
+          </View>
+        </View>
+
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -752,9 +757,6 @@ export default function HomeScreen() {
               </ThemedText>
             </TouchableOpacity>
           </View>
-
-          {/* 🎯 İLK BANNER: Başlığın hemen altında */}
-          <AdmobBanner />
 
           {/* Hata Kutusu */}
           {error && (
@@ -813,6 +815,13 @@ export default function HomeScreen() {
                 </View>
               </View>
             </View>
+          )}
+
+          {/* Günlük vakit listesi başlığı */}
+          {times && (
+            <ThemedText style={styles.sectionTitle}>
+              Günlük Namaz Vakitleri
+            </ThemedText>
           )}
 
           {/* Günlük vakit listesi */}
@@ -880,9 +889,10 @@ export default function HomeScreen() {
           </View>
         </ScrollView>
 
-        {/* 🎯 İKİNCİ BANNER: Sayfanın en altında sabit */}
-        <View style={styles.bottomBannerWrapper}>
-          <AdmobBanner />
+        {/* ALT BANNER */}
+        <View style={styles.bannerBottomWrapper}>
+          <View style={styles.bannerInner}>
+          </View>
         </View>
       </ThemedView>
     </SafeAreaView>
@@ -896,11 +906,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    justifyContent: 'space-between',
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 48, // alttaki banner üstüne içerik gelmesin diye biraz boşluk
+    paddingTop: 8,
+    paddingBottom: 24,
     gap: 16,
   },
   centeredContainer: {
@@ -917,9 +928,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 4,
   },
   appTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
   } as TextStyle,
   locationText: {
@@ -928,10 +940,11 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   } as TextStyle,
   locationButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
+    backgroundColor: 'rgba(0,0,0,0.02)',
   },
   locationButtonText: {
     fontSize: 13,
@@ -962,17 +975,22 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   } as TextStyle,
   currentCard: {
-    padding: 16,
-    borderRadius: 16,
+    padding: 18,
+    borderRadius: 18,
     borderWidth: 1,
     gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   currentLabel: {
     fontSize: 13,
     opacity: 0.8,
   } as TextStyle,
   currentName: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
   } as TextStyle,
   nextRow: {
@@ -1001,6 +1019,12 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     fontWeight: '600',
   } as TextStyle,
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 8,
+    marginBottom: 4,
+  } as TextStyle,
   prayerList: {
     gap: 8,
   },
@@ -1012,6 +1036,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
   prayerName: {
     fontSize: 15,
@@ -1022,7 +1051,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   } as TextStyle,
   actionsRow: {
-    marginTop: 8,
+    marginTop: 12,
     gap: 8,
   },
   primaryButton: {
@@ -1047,11 +1076,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   } as TextStyle,
-
-  // 🔻 Alt sabit banner stili
-  bottomBannerWrapper: {
-    borderTopWidth: 0.5,
-    borderColor: '#ccc',
+  bannerTopWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
     paddingBottom: 4,
+  },
+  bannerBottomWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  bannerInner: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

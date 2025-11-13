@@ -1,179 +1,403 @@
-// app/(tabs)/explore.tsx
+// app/(tabs)/monthly.tsx
+
+import AdmobBanner from '@/components/AdmobBanner';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from 'expo-router';
-import React, { useState } from 'react';
-import { ActivityIndicator, FlatList, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  TextStyle,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useThemeColor } from '@/hooks/use-theme-color';
 
-// Ana ekrandaki (index.tsx) CachedPrayerData tipiyle aynı olmalı
+/** --- Tipler --- */
+
+interface PrayerDay {
+  date: string;
+  fajr: string;
+  sun: string;
+  dhuhr: string;
+  asr: string;
+  maghrib: string;
+  isha: string;
+}
+
 interface CachedPrayerData {
   locationId: string;
   fetchDate: string;
-  monthlyTimes: any[]; 
+  monthlyTimes: PrayerDay[];
 }
 
-// Aylık API verisindeki her bir günün tipi
-interface DailyTime {
-  date: string;
-  fajr: string; // imsak
-  sun: string; // güneş
-  dhuhr: string; // öğle
-  asr: string; // ikindi
-  maghrib: string; // akşam
-  isha: string; // yatsı
+interface LocationData {
+  id: string;
+  name: string;
 }
 
-// Tarihi "10 Kasım 2025" formatına çevirir
-function formatDate(dateString: string) {
+const CACHE_KEY = '@cached_prayer_data';
+const LOCATION_KEY = '@selected_location';
+
+/** --- Yardımcı --- */
+
+function getTodayDate(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    '0'
+  )}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function formatDateTR(dateStr: string): string {
   try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('tr-TR', {
-      day: 'numeric',
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('tr-TR', {
+      day: '2-digit',
       month: 'long',
-      year: 'numeric',
     });
-  } catch (e) {
-    return dateString; // Hata olursa orijinal tarihi göster
+  } catch {
+    return dateStr;
   }
 }
 
 export default function MonthlyScreen() {
-  const [monthlyData, setMonthlyData] = useState<DailyTime[]>([]);
+  const [monthlyTimes, setMonthlyTimes] = useState<PrayerDay[] | null>(null);
+  const [location, setLocation] = useState<LocationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      loadCachedData();
-    }, [])
-  );
+  const cardBackgroundColor = useThemeColor({}, 'card');
+  const borderColor = useThemeColor({}, 'border');
+  const tintColor = useThemeColor({}, 'tint');
 
-  async function loadCachedData() {
-    setLoading(true);
-    setError(null);
-    setMonthlyData([]);
-    try {
-      const cachedDataJson = await AsyncStorage.getItem('@cached_prayer_data');
-      if (!cachedDataJson) {
-        setError('Ana sayfadan bir konum seçtiğinizde aylık veriler burada görünecektir.');
+  useEffect(() => {
+    async function loadMonthly() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const locationJson = await AsyncStorage.getItem(LOCATION_KEY);
+        if (!locationJson) {
+          setError('Lütfen önce konum seçin.');
+          setLoading(false);
+          return;
+        }
+
+        const loc: LocationData = JSON.parse(locationJson);
+        setLocation(loc);
+
+        const cachedJson = await AsyncStorage.getItem(CACHE_KEY);
+
+        if (cachedJson) {
+          const cached: CachedPrayerData = JSON.parse(cachedJson);
+          if (cached.locationId === loc.id && Array.isArray(cached.monthlyTimes)) {
+            setMonthlyTimes(cached.monthlyTimes);
+            setLoading(false);
+            return;
+          }
+        }
+
+        // Cache yoksa veya farklı lokasyonsa yeniden çek
+        const today = getTodayDate();
+        const res = await fetch(
+          `https://prayertimes.api.abdus.dev/api/diyanet/prayertimes?location_id=${loc.id}`
+        );
+
+        if (!res.ok) {
+          throw new Error(`Vakitler alınamadı (HTTP ${res.status}).`);
+        }
+
+        const monthly: PrayerDay[] = await res.json();
+        setMonthlyTimes(monthly);
+
+        const cache: CachedPrayerData = {
+          locationId: loc.id,
+          fetchDate: today,
+          monthlyTimes: monthly,
+        };
+
+        await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+      } catch (e: any) {
+        console.warn('Monthly load error:', e);
+        setError(e?.message ?? 'Aylık takvim yüklenirken hata oluştu.');
+      } finally {
         setLoading(false);
-        return;
       }
-      
-      const cachedData: CachedPrayerData = JSON.parse(cachedDataJson);
-      
-      if (cachedData.monthlyTimes && cachedData.monthlyTimes.length > 0) {
-        setMonthlyData(cachedData.monthlyTimes);
-      } else {
-        setError('Aylık veri bulunamadı.');
-      }
-
-    } catch (e) {
-      setError('Veri yüklenirken bir hata oluştu.');
-      console.error(e);
-    } finally {
-      setLoading(false);
     }
-  }
+
+    loadMonthly();
+  }, []);
+
+  const todayStr = getTodayDate();
 
   if (loading) {
     return (
-      <ThemedView style={styles.center}>
-        <ActivityIndicator size="large" />
-      </ThemedView>
+      <SafeAreaView style={{ flex: 1 }}>
+        <ThemedView style={styles.centered}>
+          <ActivityIndicator size="large" color={tintColor} />
+          <ThemedText style={styles.loadingText}>
+            Aylık takvim yükleniyor...
+          </ThemedText>
+        </ThemedView>
+      </SafeAreaView>
     );
   }
-
-  if (error) {
-    return (
-      <ThemedView style={styles.center}>
-        <ThemedText style={styles.errorText}>{error}</ThemedText>
-      </ThemedView>
-    );
-  }
-
-  const renderHeader = () => (
-    <View style={[styles.row, styles.headerRow]}>
-      <ThemedText style={[styles.cell, styles.headerText, styles.dateCell]}>Tarih</ThemedText>
-      <ThemedText style={[styles.cell, styles.headerText]}>İmsak</ThemedText>
-      <ThemedText style={[styles.cell, styles.headerText]}>Öğle</ThemedText>
-      <ThemedText style={[styles.cell, styles.headerText]}>Akşam</ThemedText>
-    </View>
-  );
-
-  const renderItem = ({ item }: { item: DailyTime }) => (
-    <View style={styles.row}>
-      <ThemedText style={[styles.cell, styles.dateCell]}>{formatDate(item.date)}</ThemedText>
-      <ThemedText style={styles.cell}>{item.fajr}</ThemedText>
-      <ThemedText style={styles.cell}>{item.dhuhr}</ThemedText>
-      <ThemedText style={styles.cell}>{item.maghrib}</ThemedText>
-    </View>
-  );
 
   return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="title" style={styles.title}>Aylık Takvim</ThemedText>
-      {/* FlatList'i yatayda da kaydırılabilir yapmak için ScrollView içine aldık.
-        Bu, çok fazla veri için performanslı değildir ancak 30 günlük veri için yeterlidir.
-      */}
-      <ScrollView horizontal contentContainerStyle={{ width: '150%' }}>
-        <FlatList
-          data={monthlyData}
-          keyExtractor={(item) => item.date}
-          ListHeaderComponent={renderHeader}
-          renderItem={renderItem}
-          stickyHeaderIndices={[0]} // Başlık satırını sabitler
-        />
-      </ScrollView>
-    </ThemedView>
+    <SafeAreaView style={{ flex: 1 }}>
+      <ThemedView style={styles.container}>
+        {/* ÜST ADMOB */}
+        <View style={styles.bannerTopWrapper}>
+          <View style={styles.bannerInner}>
+            <AdmobBanner />
+          </View>
+        </View>
+
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          {/* Başlık */}
+          <View style={styles.header}>
+            <ThemedText style={styles.title}>Aylık Takvim</ThemedText>
+            {location && (
+              <ThemedText style={styles.location}>
+                {location.name}
+              </ThemedText>
+            )}
+            <ThemedText style={styles.subtitle}>
+              Bu ayın tüm namaz vakitlerini aşağıdaki listeden
+              inceleyebilirsiniz.
+            </ThemedText>
+          </View>
+
+          {/* Hata Mesajı */}
+          {error && (
+            <View style={styles.errorBox}>
+              <ThemedText style={styles.errorText}>{error}</ThemedText>
+            </View>
+          )}
+
+          {/* Aylık Liste */}
+          {monthlyTimes && (
+            <View style={styles.monthList}>
+              {monthlyTimes.map((day) => {
+                const isToday = day.date.startsWith(todayStr);
+
+                return (
+                  <View
+                    key={day.date}
+                    style={[
+                      styles.dayCard,
+                      {
+                        backgroundColor: cardBackgroundColor,
+                        borderColor: isToday ? tintColor : borderColor,
+                      },
+                      isToday && styles.dayCardToday,
+                    ]}
+                  >
+                    {/* Tarih */}
+                    <View style={styles.dayHeader}>
+                      <ThemedText
+                        style={[
+                          styles.dayDate,
+                          isToday && { color: tintColor },
+                        ]}
+                      >
+                        {formatDateTR(day.date)}
+                      </ThemedText>
+                      {isToday && (
+                        <ThemedText
+                          style={[
+                            styles.todayBadge,
+                            { borderColor: tintColor, color: tintColor },
+                          ]}
+                        >
+                          Bugün
+                        </ThemedText>
+                      )}
+                    </View>
+
+                    {/* Saatler */}
+                    <View style={styles.timesGrid}>
+                      <View style={styles.timeCol}>
+                        <ThemedText style={styles.timeLabel}>İmsak</ThemedText>
+                        <ThemedText style={styles.timeValue}>
+                          {day.fajr || '--:--'}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.timeCol}>
+                        <ThemedText style={styles.timeLabel}>Güneş</ThemedText>
+                        <ThemedText style={styles.timeValue}>
+                          {day.sun || '--:--'}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.timeCol}>
+                        <ThemedText style={styles.timeLabel}>Öğle</ThemedText>
+                        <ThemedText style={styles.timeValue}>
+                          {day.dhuhr || '--:--'}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.timeCol}>
+                        <ThemedText style={styles.timeLabel}>İkindi</ThemedText>
+                        <ThemedText style={styles.timeValue}>
+                          {day.asr || '--:--'}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.timeCol}>
+                        <ThemedText style={styles.timeLabel}>Akşam</ThemedText>
+                        <ThemedText style={styles.timeValue}>
+                          {day.maghrib || '--:--'}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.timeCol}>
+                        <ThemedText style={styles.timeLabel}>Yatsı</ThemedText>
+                        <ThemedText style={styles.timeValue}>
+                          {day.isha || '--:--'}
+                        </ThemedText>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </ScrollView>
+
+        {/* ALT ADMOB */}
+        <View style={styles.bannerBottomWrapper}>
+          <View style={styles.bannerInner}>
+          </View>
+        </View>
+      </ThemedView>
+    </SafeAreaView>
   );
 }
+
+/** --- Stil --- */
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 60,
+    justifyContent: 'space-between',
   },
-  center: {
+  centered: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '500',
+  } as TextStyle,
+  bannerTopWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  bannerBottomWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  bannerInner: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 24,
+    gap: 12,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 8,
   },
   title: {
+    fontSize: 22,
+    fontWeight: '700',
+  } as TextStyle,
+  location: {
+    marginTop: 4,
+    fontSize: 14,
+    opacity: 0.9,
+  } as TextStyle,
+  subtitle: {
+    marginTop: 6,
+    fontSize: 13,
     textAlign: 'center',
-    marginBottom: 20,
+    opacity: 0.7,
+  } as TextStyle,
+  errorBox: {
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: '#ffefef',
+    borderWidth: 1,
+    borderColor: '#ffcccc',
   },
   errorText: {
-    textAlign: 'center',
-    padding: 20,
-    fontSize: 16,
-    color: 'gray',
+    fontSize: 14,
+    color: '#b00020',
+  } as TextStyle,
+  monthList: {
+    gap: 10,
   },
-  row: {
+  dayCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  dayCardToday: {
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  dayHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingHorizontal: 10,
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  headerRow: {
-    backgroundColor: '#f5f5f5',
+  dayDate: {
+    fontSize: 16,
+    fontWeight: '600',
+  } as TextStyle,
+  todayBadge: {
+    fontSize: 11,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  } as TextStyle,
+  timesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
   },
-  cell: {
-    flex: 1,
+  timeCol: {
+    width: '30%',
+    minWidth: '30%',
+  },
+  timeLabel: {
+    fontSize: 12,
+    opacity: 0.7,
+  } as TextStyle,
+  timeValue: {
     fontSize: 14,
-    textAlign: 'center',
-  },
-  dateCell: {
-    flex: 1.5, // Tarih sütunu daha geniş
-    textAlign: 'left',
-    paddingLeft: 5,
-  },
-  headerText: {
-    fontWeight: 'bold',
-    fontSize: 15,
-  },
+    fontWeight: '500',
+  } as TextStyle,
 });
