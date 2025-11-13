@@ -4,9 +4,8 @@ import AdmobBanner from '@/components/AdmobBanner';
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
-  useState,
+  useState
 } from 'react';
 import {
   Alert,
@@ -21,7 +20,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import * as Notifications from 'expo-notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
 
@@ -89,18 +87,14 @@ export const DEFAULT_SETTINGS: PrayerSettings = {
 export const SETTINGS_KEY = '@prayer_settings';
 
 /**
- * --- Bildirim / Ses Sabitleri ---
+ * --- Bildirim Sabitleri ---
  */
 
-const ANDROID_CHANNEL_ID = 'adhan_channel_v1'; // app.json ile uyumlu olmalı
+// Kanal ID'si
+const ANDROID_CHANNEL_ID = 'standard_notification_v2'; 
 
-// Notification tarafında kullanılacak ses adı (dosya ismi)
-const NOTIFICATION_SOUND_NAME = 'adhan.wav';
-
-// Uygulama içi player için dosya referansı
-const ADHAN_REQUIRE = require('../../assets/sounds/adhan.wav');
-
-const SCHEDULED_HASH_KEY = '@prayer_scheduled_hash';
+// BURAYI DEĞİŞTİRDİK: _v2 yaparak kodun bildirimleri zorla tekrar kurmasını sağlıyoruz.
+const SCHEDULED_HASH_KEY = '@prayer_scheduled_hash_v2';
 
 /**
  * --- Yardımcı Fonksiyonlar ---
@@ -132,10 +126,6 @@ function timeToDateBase(timeString: string): Date {
   return d;
 }
 
-/**
- * Verilen saat bugün geçtiyse -> ertesi gün aynı saate kaydır.
- * Gelecekteyse -> bugün o saat.
- */
 function safeTimeToFutureDate(
   timeString: string,
   now: Date = new Date()
@@ -180,7 +170,8 @@ function setForegroundAlerts(enabled: boolean) {
   });
 }
 
-setForegroundAlerts(false);
+// Uygulama açıkken bildirim gelmesi için true yapıldı
+setForegroundAlerts(true); 
 
 async function getMergedSettings(): Promise<PrayerSettings> {
   try {
@@ -272,8 +263,7 @@ function buildSchedulePayload(
 }
 
 async function scheduleDailyNotifications(
-  prayerTimes: PrayerTimeData,
-  withSound: boolean = true
+  prayerTimes: PrayerTimeData
 ): Promise<void> {
   let { status: existingStatus } = await Notifications.getPermissionsAsync();
 
@@ -283,10 +273,7 @@ async function scheduleDailyNotifications(
   }
 
   if (existingStatus !== 'granted') {
-    Alert.alert(
-      'Bildirim İzni',
-      'Namaz vakitleri için lütfen bildirim izni verin.'
-    );
+    console.log('Bildirim izni verilmedi.');
     return;
   }
 
@@ -294,11 +281,16 @@ async function scheduleDailyNotifications(
   const { list, hash } = buildSchedulePayload(prayerTimes, settings);
 
   const lastHash = await AsyncStorage.getItem(SCHEDULED_HASH_KEY);
+  
+  // Hash değişmemiş olsa bile, eğer kullanıcı "bildirim gelmedi" diyorsa
+  // belki ilk kurulumda hata oldu. Debug için bu kontrolü geçici olarak kaldırabilirsin
+  // ya da HASH_KEY adını değiştirdiğimiz için zaten tekrar kuracak.
   if (lastHash === hash) {
-    console.log('LOG: Kurulu bildirimler değişmedi, tekrar schedule edilmedi.');
+    console.log('LOG: Bildirimler güncel, işlem yapılmadı.');
     return;
   }
 
+  // Önceki planlanmış bildirimleri temizle
   await Notifications.cancelAllScheduledNotificationsAsync();
 
   const now = new Date();
@@ -308,9 +300,9 @@ async function scheduleDailyNotifications(
 
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: `${p.name} Vakti!`,
+        title: `Vakit Geldi`, 
         body: `${p.name} vakti girdi.`,
-        sound: withSound ? (NOTIFICATION_SOUND_NAME as any) : undefined,
+        sound: 'default',
       },
       trigger: {
         date,
@@ -321,26 +313,31 @@ async function scheduleDailyNotifications(
     });
 
     console.log(
-      `LOG: Notification ${p.name} -> ${date.toLocaleString('tr-TR')}`
+      `LOG: Planlandı -> ${p.name} saat: ${date.toLocaleString('tr-TR')}`
     );
   }
 
   await AsyncStorage.setItem(SCHEDULED_HASH_KEY, hash);
+  // Kullanıcıya bilgi verebiliriz (isteğe bağlı)
+  // Alert.alert('Bilgi', 'Bildirimler güncellendi.');
 }
 
-let audioModeConfigured = false;
-
-async function ensureAudioModeOnce(): Promise<void> {
-  if (audioModeConfigured) return;
-  audioModeConfigured = true;
-
-  try {
-    await setAudioModeAsync({
-      playsInSilentMode: true,
-    });
-  } catch (e) {
-    console.warn('setAudioModeAsync error:', e);
+// Test bildirimi gönderme fonksiyonu
+async function sendTestNotification() {
+  const { status } = await Notifications.getPermissionsAsync();
+  if (status !== 'granted') {
+    Alert.alert('Hata', 'Bildirim izni yok!');
+    return;
   }
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: "Test Bildirimi",
+      body: "Bu bir test bildirimidir. Ses ve titreşim kontrolü.",
+      sound: 'default',
+    },
+    trigger: null, // Hemen gönder
+  });
 }
 
 function useSetupAndroidNotificationChannel() {
@@ -351,15 +348,13 @@ function useSetupAndroidNotificationChannel() {
       try {
         await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
           name: 'Namaz Vakitleri',
-          importance: Notifications.AndroidImportance.MAX,
-          sound: NOTIFICATION_SOUND_NAME as any,
+          importance: Notifications.AndroidImportance.HIGH,
           enableVibrate: true,
-          vibrationPattern: [0, 500, 500, 500],
-          lockscreenVisibility:
-            Notifications.AndroidNotificationVisibility.PUBLIC,
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+          sound: 'default',
         });
 
-        console.log('LOG: Android notification channel configured.');
+        console.log('LOG: Android bildirim kanalı (Standart) ayarlandı.');
       } catch (e) {
         console.warn('Android channel setup error:', e);
       }
@@ -377,7 +372,6 @@ export default function HomeScreen() {
     useState<LocationData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [testing] = useState<boolean>(false);
 
   const [currentPrayer, setCurrentPrayer] = useState<PrayerName | null>(null);
   const [nextPrayer, setNextPrayer] = useState<PrayerName | null>(null);
@@ -392,68 +386,8 @@ export default function HomeScreen() {
   const mainAccentColor = useThemeColor({}, 'tint');
 
   const lastScheduledTimesJsonRef = useRef<string | null>(null);
-  const timersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
-
-  const adhanPlayer = useAudioPlayer(ADHAN_REQUIRE);
 
   useSetupAndroidNotificationChannel();
-
-  useEffect(() => {
-    (async () => {
-      await ensureAudioModeOnce();
-    })();
-  }, []);
-
-  const playAdhan = useMemo(
-    () => async () => {
-      try {
-        await ensureAudioModeOnce();
-        adhanPlayer.seekTo(0);
-        await adhanPlayer.play();
-      } catch (e) {
-        console.warn('Ezan çalma hatası:', e);
-      }
-    },
-    [adhanPlayer]
-  );
-
-  useEffect(() => {
-    if (!times) return;
-
-    (async () => {
-      const settings = await getMergedSettings();
-      const { list } = buildSchedulePayload(times, settings);
-
-      timersRef.current.forEach((id) => clearTimeout(id));
-      timersRef.current = [];
-
-      const now = new Date();
-
-      for (const p of list) {
-        const date = safeTimeToFutureDate(p.time, now);
-        const ms = date.getTime() - now.getTime();
-
-        if (ms <= 0) continue;
-
-        const id = setTimeout(() => {
-          playAdhan();
-        }, ms);
-
-        timersRef.current.push(id);
-
-        console.log(
-          `LOG: Foreground timer ${p.name} -> ${date.toLocaleString(
-            'tr-TR'
-          )} (+${Math.round(ms / 1000)}s)`
-        );
-      }
-    })();
-
-    return () => {
-      timersRef.current.forEach((id) => clearTimeout(id));
-      timersRef.current = [];
-    };
-  }, [times, playAdhan]);
 
   useEffect(() => {
     if (!times) return;
@@ -461,7 +395,7 @@ export default function HomeScreen() {
     const json = JSON.stringify(times);
     if (json === lastScheduledTimesJsonRef.current) return;
 
-    scheduleDailyNotifications(times, true).catch((e) =>
+    scheduleDailyNotifications(times).catch((e) =>
       console.warn('scheduleDailyNotifications error:', e)
     );
 
@@ -663,7 +597,6 @@ export default function HomeScreen() {
         barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
       />
       <ThemedView style={styles.container}>
-        {/* ÜST BANNER */}
         <View style={styles.bannerTopWrapper}>
           <View style={styles.bannerInner}>
             <AdmobBanner />
@@ -674,7 +607,6 @@ export default function HomeScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Başlık + Konum */}
           <View style={styles.headerRow}>
             <View>
               <ThemedText style={styles.appTitle}>Vakit Rehberi</ThemedText>
@@ -697,7 +629,15 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Hata Kutusu */}
+          {/* --- YENİ TEST BUTONU --- */}
+          <TouchableOpacity
+            style={[styles.testButton, { backgroundColor: mainAccentColor }]}
+            onPress={sendTestNotification}
+          >
+            <ThemedText style={styles.testButtonText}>🔔 Test Bildirimi Gönder</ThemedText>
+          </TouchableOpacity>
+          {/* ----------------------- */}
+
           {error && (
             <View style={styles.errorBox}>
               <ThemedText style={styles.errorText}>{error}</ThemedText>
@@ -712,7 +652,6 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Şu anki & Sonraki vakit + geri sayım */}
           {times && (
             <View
               style={[
@@ -756,14 +695,12 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Günlük vakit listesi başlığı */}
           {times && (
             <ThemedText style={styles.sectionTitle}>
               Günlük Namaz Vakitleri
             </ThemedText>
           )}
 
-          {/* Günlük vakit listesi */}
           {times && (
             <View style={styles.prayerList}>
               {[
@@ -801,11 +738,8 @@ export default function HomeScreen() {
               })}
             </View>
           )}
-
-          {/* TEST VE AYARLAR BUTONLARI KALDIRILDI */}
         </ScrollView>
 
-        {/* ALT BANNER */}
         <View style={styles.bannerBottomWrapper}>
           <View style={styles.bannerInner}>
           </View>
@@ -829,18 +763,7 @@ const styles = StyleSheet.create({
     paddingTop: 30,
     paddingBottom: 104,
     gap: 16,
-    
   },
-  centeredContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 16,
-    fontWeight: '500',
-  } as TextStyle,
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -866,6 +789,19 @@ const styles = StyleSheet.create({
   locationButtonText: {
     fontSize: 13,
     fontWeight: '500',
+  } as TextStyle,
+  // Yeni Test Butonu Stili
+  testButton: {
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  testButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
   } as TextStyle,
   errorBox: {
     padding: 12,
@@ -966,32 +902,6 @@ const styles = StyleSheet.create({
   prayerTime: {
     fontSize: 15,
     fontVariant: ['tabular-nums'],
-  } as TextStyle,
-  actionsRow: {
-    marginTop: 12,
-    gap: 8,
-  },
-  primaryButton: {
-    paddingVertical: 12,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  } as TextStyle,
-  secondaryButton: {
-    paddingVertical: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
   } as TextStyle,
   bannerTopWrapper: {
     paddingHorizontal: 16,
