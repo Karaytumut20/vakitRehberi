@@ -12,7 +12,7 @@ import {
 const TEST_BANNER_ID = TestIds.BANNER;
 
 // Üretim ID (Yayına çıkarken değiştireceksin)
-const PROD_BANNER_ID = 'ca-app-pub-xxxxxxxxxxxxxxxx/xxxxxxxxxx';
+const PROD_BANNER_ID = 'ca-app-pub-4816381866965413/9089404028';
 
 const AdmobBanner: React.FC = () => {
   const [failed, setFailed] = useState(false);

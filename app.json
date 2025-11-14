@@ -8,18 +8,26 @@
     "scheme": "vakitrehberi",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
         "UIBackgroundModes": ["remote-notification"]
       }
     },
+
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "monochromeImage": "./assets/images/android-icon-monochrome.png",
+        "backgroundColor": "#FFFFFF"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -31,6 +39,7 @@
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
+
     "plugins": [
       [
         "expo-notifications",
@@ -41,14 +50,17 @@
       "expo-asset",
       "expo-audio"
     ],
+
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+
     "experiments": {
       "typedRoutes": true
     },
+
     "extra": {
       "eas": {
         "projectId": "0a75cac2-3629-4aec-9452-85e142537280"
@@ -57,6 +69,6 @@
   },
 
   "react-native-google-mobile-ads": {
-    "android_app_id": "ca-app-pub-3940256099942544~3347511713"
+    "android_app_id": "ca-app-pub-4816381866965413~2973328480"
   }
 }
