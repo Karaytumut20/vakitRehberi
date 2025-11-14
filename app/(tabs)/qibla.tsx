@@ -100,7 +100,7 @@ export default function QiblaScreen() {
   // Ekranı açık tut
   const activateKeepAwake = async () => {
     try {
-      await KeepAwake.activateKeepAwake();
+await KeepAwake.activateKeepAwakeAsync();
     } catch (e) {
       console.warn('KeepAwake activate error:', e);
     }
