@@ -90,10 +90,16 @@ export const SETTINGS_KEY = '@prayer_settings';
  */
 
 // Kanal ID'si
-const ANDROID_CHANNEL_ID = 'standard_notification_v2';
+const ANDROID_CHANNEL_ID = 'prayer_times_adhan_v1';
+const ANDROID_SOUND_NAME = 'adhan.wav';
 
-// Hash key (v2)
-const SCHEDULED_HASH_KEY = '@prayer_scheduled_hash_v2';
+// v3: Gün + hash meta
+const SCHEDULED_META_KEY = '@prayer_scheduled_meta_v3';
+
+interface ScheduleMeta {
+  hash: string;
+  date: string; // YYYY-MM-DD
+}
 
 /**
  * --- Yardımcı Fonksiyonlar ---
@@ -125,14 +131,21 @@ function timeToDateBase(timeString: string): Date {
   return d;
 }
 
+/**
+ * Bu fonksiyon, verilen saat eğer geçmişteyse
+ * otomatik olarak bir sonraki güne kaydırır (ertesi gün aynı saat).
+ */
 function safeTimeToFutureDate(
   timeString: string,
   now: Date = new Date()
 ): Date {
   const candidate = timeToDateBase(timeString);
+
   if (candidate.getTime() <= now.getTime()) {
+    // Geçmiş vakit → ertesi günün aynı saati
     return new Date(candidate.getTime() + 24 * 60 * 60 * 1000);
   }
+
   return candidate;
 }
 
@@ -148,7 +161,7 @@ function formatTimeRemaining(ms: number): string {
 }
 
 /**
- * --- Bildirim Davranışı ---
+ * --- Bildirim Davranışı (Uygulama açıkken de gözüksün) ---
  */
 
 function setForegroundAlerts(enabled: boolean) {
@@ -261,9 +274,19 @@ function buildSchedulePayload(
   return { list, hash };
 }
 
+/**
+ * --- EZAN BİLDİRİMLERİ PLANLAMA (REVİZE) ---
+ *
+ * 1. Aynı gün ve aynı hash için tekrar planlama YAPMAZ
+ * 2. Yeni güne geçildiğinde, hash değiştiğinde veya saatler değiştiğinde
+ *    önce eski bildirimleri temizler → sonra yenilerini planlar
+ * 3. Geçmiş vakitleri ertesi güne kaydırır (ANINDA 4–5 bildirim patlamaz)
+ */
+
 async function scheduleDailyNotifications(
   prayerTimes: PrayerTimeData
 ): Promise<void> {
+  // 1) İzin kontrolü
   let { status: existingStatus } = await Notifications.getPermissionsAsync();
 
   if (existingStatus !== 'granted') {
@@ -276,29 +299,45 @@ async function scheduleDailyNotifications(
     return;
   }
 
+  // 2) Ayarlar + payload
   const settings = await getMergedSettings();
   const { list, hash } = buildSchedulePayload(prayerTimes, settings);
+  const today = getTodayDate();
 
-  const lastHash = await AsyncStorage.getItem(SCHEDULED_HASH_KEY);
+  // 3) Eski meta'yı oku
+  let meta: ScheduleMeta | null = null;
+  try {
+    const metaJson = await AsyncStorage.getItem(SCHEDULED_META_KEY);
+    if (metaJson) {
+      meta = JSON.parse(metaJson) as ScheduleMeta;
+    }
+  } catch (e) {
+    console.warn('scheduleDailyNotifications meta parse error:', e);
+  }
 
-  if (lastHash === hash) {
-    console.log('LOG: Bildirimler güncel, işlem yapılmadı.');
+  // 4) Aynı gün ve aynı hash ise tekrar planlama YAPMA
+  if (meta && meta.date === today && meta.hash === hash) {
+    console.log(
+      'LOG: Bildirimler zaten bugünün vakitlerine göre planlanmış, tekrar kurulmadı.'
+    );
     return;
   }
 
-  // Önceki planlanmış bildirimleri temizle
+  // 5) Eski planlanmış bildirimleri temizle (önceki gün / eski konum / eski ayarlar)
   await Notifications.cancelAllScheduledNotificationsAsync();
+  console.log('LOG: Önceki tüm planlanmış bildirimler temizlendi.');
 
   const now = new Date();
 
+  // 6) Her vakit için planlama
   for (const p of list) {
     const date = safeTimeToFutureDate(p.time, now);
 
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: `Vakit Geldi`,
+        title: 'Vakit Geldi',
         body: `${p.name} vakti girdi.`,
-        sound: 'default',
+        sound: ANDROID_SOUND_NAME,
       },
       trigger: {
         date,
@@ -313,8 +352,15 @@ async function scheduleDailyNotifications(
     );
   }
 
-  await AsyncStorage.setItem(SCHEDULED_HASH_KEY, hash);
+  // 7) Yeni meta'yı kaydet
+  const newMeta: ScheduleMeta = { hash, date: today };
+  await AsyncStorage.setItem(SCHEDULED_META_KEY, JSON.stringify(newMeta));
+  console.log('LOG: Yeni bildirim meta kaydedildi:', newMeta);
 }
+
+/**
+ * --- Android Bildirim Kanalı ---
+ */
 
 function useSetupAndroidNotificationChannel() {
   useEffect(() => {
@@ -324,13 +370,13 @@ function useSetupAndroidNotificationChannel() {
       try {
         await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
           name: 'Namaz Vakitleri',
-          importance: Notifications.AndroidImportance.HIGH,
+          importance: Notifications.AndroidImportance.MAX,
           enableVibrate: true,
           lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-          sound: 'default',
+          sound: ANDROID_SOUND_NAME,
         });
 
-        console.log('LOG: Android bildirim kanalı (Standart) ayarlandı.');
+        console.log('LOG: Android bildirim kanalı (Adhan) ayarlandı.');
       } catch (e) {
         console.warn('Android channel setup error:', e);
       }
@@ -361,15 +407,22 @@ export default function HomeScreen() {
   const borderColor = useThemeColor({}, 'border');
   const mainAccentColor = useThemeColor({}, 'tint');
 
+  // Aynı times ile tekrar tekrar planlamayı engellemek için
   const lastScheduledTimesJsonRef = useRef<string | null>(null);
 
   useSetupAndroidNotificationChannel();
 
+  /**
+   * Vakitler her gün / konum değiştiğinde bildirim planlama
+   */
   useEffect(() => {
     if (!times) return;
 
     const json = JSON.stringify(times);
-    if (json === lastScheduledTimesJsonRef.current) return;
+    if (json === lastScheduledTimesJsonRef.current) {
+      // Aynı vakitler → tekrar planlama yapma
+      return;
+    }
 
     scheduleDailyNotifications(times).catch((e) =>
       console.warn('scheduleDailyNotifications error:', e)
@@ -496,6 +549,9 @@ export default function HomeScreen() {
     }
   }
 
+  /**
+   * --- Şu anki vakit, sonraki vakit ve geri sayım ---
+   */
   useEffect(() => {
     if (!times) return;
 
@@ -836,8 +892,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     color: '#e1af64ff',
   } as TextStyle,
-
-  // Eski liste stilleri (kullanmasan da kalabilir)
   prayerList: {
     gap: 8,
   },
@@ -863,8 +917,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontVariant: ['tabular-nums'],
   } as TextStyle,
-
-  // --- PREMIUM GOLD TABLE (görseldeki gibi) ---
   premiumTable: {
     backgroundColor: '#0b0b0a',
     borderRadius: 14,
@@ -900,7 +952,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
   } as TextStyle,
-
   bannerTopWrapper: {
     paddingHorizontal: 16,
     paddingTop: 8,

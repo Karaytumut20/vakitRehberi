@@ -12,23 +12,14 @@
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
     },
 
     "ios": {
-      "supportsTablet": true,
-      "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
-      }
+      "supportsTablet": true
     },
 
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png",
-        "backgroundColor": "#FFFFFF"
-      },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.VakitRehberi",
@@ -40,26 +31,7 @@
       ]
     },
 
-    "plugins": [
-      [
-        "expo-notifications",
-        {
-          "sounds": ["./assets/sounds/adhan.wav"]
-        }
-      ],
-      "expo-asset",
-      "expo-audio"
-    ],
-
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
-
-    "experiments": {
-      "typedRoutes": true
-    },
+    "plugins": ["expo-asset", "expo-audio"],
 
     "extra": {
       "eas": {

@@ -8,12 +8,14 @@ module.exports = function (api) {
         {
           root: ['./'],
           alias: {
-            '@': './',   // <-- alias düzeltilmiş hali
+            '@': './',
           },
           extensions: ['.js', '.jsx', '.ts', '.tsx'],
         },
       ],
-      'expo-router/babel',
+      // ❌ Bunu kaldırdık: 'expo-router/babel'
+      require.resolve("expo-router/plugin"), // ✅ SDK 50+ için doğru kullanım
     ],
   };
 };
+A

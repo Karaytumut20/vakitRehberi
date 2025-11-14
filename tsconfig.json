@@ -21,10 +21,8 @@
     ]
   },
   "include": [
-    "expo-env.d.ts",
     "**/*.ts",
-    "**/*.tsx",
-    ".expo/types/**/*.ts"
+    "**/*.tsx"
   ],
   "exclude": [
     "node_modules"
