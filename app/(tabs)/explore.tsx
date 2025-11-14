@@ -14,7 +14,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useThemeColor } from '@/hooks/use-theme-color';
 
 /** --- Tipler --- */
 
@@ -70,9 +69,12 @@ export default function MonthlyScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const cardBackgroundColor = useThemeColor({}, 'card');
-  const borderColor = useThemeColor({}, 'border');
-  const tintColor = useThemeColor({}, 'tint');
+  // GOLD THEME RENKLER
+  const gold = '#e1c564';
+  const goldDark = '#e1af64ff';
+
+  const cardBackgroundColor = '#0b0b0a'; // premium koyu
+  const borderGoldSoft = '#e1c56433';   // yumuşak altın border
 
   useEffect(() => {
     async function loadMonthly() {
@@ -101,7 +103,6 @@ export default function MonthlyScreen() {
           }
         }
 
-        // Cache yoksa veya farklı lokasyonsa yeniden çek
         const today = getTodayDate();
         const res = await fetch(
           `https://prayertimes.api.abdus.dev/api/diyanet/prayertimes?location_id=${loc.id}`
@@ -138,8 +139,8 @@ export default function MonthlyScreen() {
     return (
       <SafeAreaView style={{ flex: 1 }}>
         <ThemedView style={styles.centered}>
-          <ActivityIndicator size="large" color={tintColor} />
-          <ThemedText style={styles.loadingText}>
+          <ActivityIndicator size="large" color={gold} />
+          <ThemedText style={[styles.loadingText, { color: gold }]}>
             Aylık takvim yükleniyor...
           </ThemedText>
         </ThemedView>
@@ -148,8 +149,8 @@ export default function MonthlyScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <ThemedView style={styles.container}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#090906' }}>
+      <ThemedView style={[styles.container, { backgroundColor: '#090906' }]}>
         {/* ÜST ADMOB */}
         <View style={styles.bannerTopWrapper}>
           <View style={styles.bannerInner}>
@@ -163,13 +164,17 @@ export default function MonthlyScreen() {
         >
           {/* Başlık */}
           <View style={styles.header}>
-            <ThemedText style={styles.title}>Aylık Takvim</ThemedText>
+            <ThemedText style={[styles.title, { color: gold }]}>
+              Aylık Takvim
+            </ThemedText>
+
             {location && (
-              <ThemedText style={styles.location}>
+              <ThemedText style={[styles.location, { color: goldDark }]}>
                 {location.name}
               </ThemedText>
             )}
-            <ThemedText style={styles.subtitle}>
+
+            <ThemedText style={[styles.subtitle, { color: goldDark }]}>
               Bu ayın tüm namaz vakitlerini aşağıdaki listeden
               inceleyebilirsiniz.
             </ThemedText>
@@ -177,7 +182,12 @@ export default function MonthlyScreen() {
 
           {/* Hata Mesajı */}
           {error && (
-            <View style={styles.errorBox}>
+            <View
+              style={[
+                styles.errorBox,
+                { borderColor: '#b00020', backgroundColor: '#330000' },
+              ]}
+            >
               <ThemedText style={styles.errorText}>{error}</ThemedText>
             </View>
           )}
@@ -195,9 +205,13 @@ export default function MonthlyScreen() {
                       styles.dayCard,
                       {
                         backgroundColor: cardBackgroundColor,
-                        borderColor: isToday ? tintColor : borderColor,
+                        borderColor: isToday ? gold : borderGoldSoft,
                       },
-                      isToday && styles.dayCardToday,
+                      isToday && {
+                        shadowColor: gold,
+                        shadowOpacity: 0.3,
+                        shadowRadius: 8,
+                      },
                     ]}
                   >
                     {/* Tarih */}
@@ -205,16 +219,17 @@ export default function MonthlyScreen() {
                       <ThemedText
                         style={[
                           styles.dayDate,
-                          isToday && { color: tintColor },
+                          { color: isToday ? gold : goldDark },
                         ]}
                       >
                         {formatDateTR(day.date)}
                       </ThemedText>
+
                       {isToday && (
                         <ThemedText
                           style={[
                             styles.todayBadge,
-                            { borderColor: tintColor, color: tintColor },
+                            { borderColor: gold, color: gold },
                           ]}
                         >
                           Bugün
@@ -224,42 +239,23 @@ export default function MonthlyScreen() {
 
                     {/* Saatler */}
                     <View style={styles.timesGrid}>
-                      <View style={styles.timeCol}>
-                        <ThemedText style={styles.timeLabel}>İmsak</ThemedText>
-                        <ThemedText style={styles.timeValue}>
-                          {day.fajr || '--:--'}
-                        </ThemedText>
-                      </View>
-                      <View style={styles.timeCol}>
-                        <ThemedText style={styles.timeLabel}>Güneş</ThemedText>
-                        <ThemedText style={styles.timeValue}>
-                          {day.sun || '--:--'}
-                        </ThemedText>
-                      </View>
-                      <View style={styles.timeCol}>
-                        <ThemedText style={styles.timeLabel}>Öğle</ThemedText>
-                        <ThemedText style={styles.timeValue}>
-                          {day.dhuhr || '--:--'}
-                        </ThemedText>
-                      </View>
-                      <View style={styles.timeCol}>
-                        <ThemedText style={styles.timeLabel}>İkindi</ThemedText>
-                        <ThemedText style={styles.timeValue}>
-                          {day.asr || '--:--'}
-                        </ThemedText>
-                      </View>
-                      <View style={styles.timeCol}>
-                        <ThemedText style={styles.timeLabel}>Akşam</ThemedText>
-                        <ThemedText style={styles.timeValue}>
-                          {day.maghrib || '--:--'}
-                        </ThemedText>
-                      </View>
-                      <View style={styles.timeCol}>
-                        <ThemedText style={styles.timeLabel}>Yatsı</ThemedText>
-                        <ThemedText style={styles.timeValue}>
-                          {day.isha || '--:--'}
-                        </ThemedText>
-                      </View>
+                      {[
+                        ['İmsak', day.fajr],
+                        ['Güneş', day.sun],
+                        ['Öğle', day.dhuhr],
+                        ['İkindi', day.asr],
+                        ['Akşam', day.maghrib],
+                        ['Yatsı', day.isha],
+                      ].map(([label, value]) => (
+                        <View key={label} style={styles.timeCol}>
+                          <ThemedText style={[styles.timeLabel, { color: goldDark }]}>
+                            {label}
+                          </ThemedText>
+                          <ThemedText style={[styles.timeValue, { color: gold }]}>
+                            {value || '--:--'}
+                          </ThemedText>
+                        </View>
+                      ))}
                     </View>
                   </View>
                 );
@@ -270,8 +266,7 @@ export default function MonthlyScreen() {
 
         {/* ALT ADMOB */}
         <View style={styles.bannerBottomWrapper}>
-          <View style={styles.bannerInner}>
-          </View>
+          <View style={styles.bannerInner}></View>
         </View>
       </ThemedView>
     </SafeAreaView>
@@ -334,18 +329,16 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 13,
     textAlign: 'center',
-    opacity: 0.7,
+    opacity: 0.8,
   } as TextStyle,
   errorBox: {
     padding: 10,
     borderRadius: 10,
-    backgroundColor: '#ffefef',
     borderWidth: 1,
-    borderColor: '#ffcccc',
   },
   errorText: {
     fontSize: 14,
-    color: '#b00020',
+    color: '#ff9999',
   } as TextStyle,
   monthList: {
     gap: 10,
@@ -354,16 +347,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  dayCardToday: {
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 3,
   },
   dayHeader: {
     flexDirection: 'row',
@@ -398,6 +381,6 @@ const styles = StyleSheet.create({
   } as TextStyle,
   timeValue: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   } as TextStyle,
 });

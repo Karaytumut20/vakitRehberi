@@ -33,7 +33,6 @@ export interface PrayerSettings {
 // Anahtarlar (index.tsx'teki id'lerle uyumlu)
 const PRAYER_KEYS: Array<{ key: keyof PrayerSettings; name: string }> = [
   { key: 'imsak', name: 'İmsak' },
-  // İstersen burayı açıp Güneş için de ayar ekleyebilirsin
   // { key: 'gunes', name: 'Güneş' },
   { key: 'ogle', name: 'Öğle' },
   { key: 'ikindi', name: 'İkindi' },
@@ -58,12 +57,9 @@ export default function SettingsScreen() {
   const [loading, setLoading] = useState(true);
 
   const cardBackgroundColor = useThemeColor({}, 'card');
-  const borderColor = useThemeColor({}, 'border');
+  const borderColorTheme = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
 
-  /**
-   * Ayarları AsyncStorage'den yükle ve varsayılanlarla merge et
-   */
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -96,9 +92,6 @@ export default function SettingsScreen() {
     loadSettings();
   }, []);
 
-  /**
-   * Ayar güncelleme + AsyncStorage'e kaydetme
-   */
   const updateSetting = (
     prayer: keyof PrayerSettings,
     type: 'adhan',
@@ -126,10 +119,10 @@ export default function SettingsScreen() {
   if (loading || !settings) {
     return (
       <SafeAreaView style={{ flex: 1 }}>
-        <ThemedView style={styles.center}>
+        <ThemedView style={[styles.center, styles.containerLoading]}>
           <ActivityIndicator size="large" color={tintColor} />
           <ThemedText style={styles.loadingText}>
-            Ayarlar Yükleniyor...
+            Ayarlar yükleniyor...
           </ThemedText>
         </ThemedView>
       </SafeAreaView>
@@ -160,12 +153,13 @@ export default function SettingsScreen() {
           <View
             style={[
               styles.card,
-              { backgroundColor: cardBackgroundColor, borderColor },
+              {
+                backgroundColor: '#0b0b0a', // premium koyu kart
+                borderColor: '#e1c56433',   // soft gold
+              },
             ]}
           >
-            <ThemedText
-              style={[styles.cardTitle, { color: tintColor }]}
-            >
+            <ThemedText style={styles.cardTitle}>
               Ezan Sesi Tercihleri
             </ThemedText>
 
@@ -178,7 +172,7 @@ export default function SettingsScreen() {
                     styles.settingRow,
                     !isLast && {
                       borderBottomWidth: 1,
-                      borderBottomColor: borderColor,
+                      borderBottomColor: '#e1c56422',
                     },
                   ]}
                 >
@@ -191,11 +185,11 @@ export default function SettingsScreen() {
                       updateSetting(key, 'adhan', value)
                     }
                     thumbColor={
-                      settings[key].adhan ? tintColor : undefined
+                      settings[key].adhan ? '#e1c564' : '#555555'
                     }
                     trackColor={{
-                      false: '#ccc',
-                      true: tintColor,
+                      false: '#333333',
+                      true: '#e1c56488',
                     }}
                   />
                 </View>
@@ -206,8 +200,7 @@ export default function SettingsScreen() {
 
         {/* ALT ADMOB BANNER */}
         <View style={styles.bannerBottomWrapper}>
-          <View style={styles.bannerInner}>
-          </View>
+          <View style={styles.bannerInner} />
         </View>
       </ThemedView>
     </SafeAreaView>
@@ -218,11 +211,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'space-between',
+    backgroundColor: '#090906', // 🔥 Ana dark arka plan (index ile aynı)
+  },
+  containerLoading: {
+    backgroundColor: '#090906',
   },
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: 24,
+    paddingBottom: 32, // tabbar + admob için ekstra
   },
   center: {
     flex: 1,
@@ -233,17 +230,20 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontWeight: '500',
+    color: '#e1c564',
   } as TextStyle,
   title: {
     fontSize: 22,
     fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
+    color: '#e1c564',
   } as TextStyle,
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     textAlign: 'center',
-    color: 'gray',
+    color: '#e1af64ff',
+    opacity: 0.9,
     marginBottom: 20,
   } as TextStyle,
   card: {
@@ -251,18 +251,19 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 6,
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
     paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e1c56422',
+    color: '#e1c564',
   } as TextStyle,
   settingRow: {
     flexDirection: 'row',
@@ -271,9 +272,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   settingText: {
-    fontSize: 16,
+    fontSize: 15,
     flex: 1,
     marginRight: 10,
+    color: '#f5f2e8',
   } as TextStyle,
   bannerTopWrapper: {
     paddingHorizontal: 16,

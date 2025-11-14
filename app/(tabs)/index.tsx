@@ -72,7 +72,7 @@ export interface PrayerSettings {
 }
 
 /**
- * --- Varsayılan Ayarlar ---
+ * --- Varsayılan Ayarlar --- 
  */
 export const DEFAULT_SETTINGS: PrayerSettings = {
   imsak: { adhan: true },
@@ -90,9 +90,9 @@ export const SETTINGS_KEY = '@prayer_settings';
  */
 
 // Kanal ID'si
-const ANDROID_CHANNEL_ID = 'standard_notification_v2'; 
+const ANDROID_CHANNEL_ID = 'standard_notification_v2';
 
-// BURAYI DEĞİŞTİRDİK: _v2 yaparak kodun bildirimleri zorla tekrar kurmasını sağlıyoruz.
+// Hash key (v2)
 const SCHEDULED_HASH_KEY = '@prayer_scheduled_hash_v2';
 
 /**
@@ -170,7 +170,7 @@ function setForegroundAlerts(enabled: boolean) {
 }
 
 // Uygulama açıkken bildirim gelmesi için true yapıldı
-setForegroundAlerts(true); 
+setForegroundAlerts(true);
 
 async function getMergedSettings(): Promise<PrayerSettings> {
   try {
@@ -280,10 +280,7 @@ async function scheduleDailyNotifications(
   const { list, hash } = buildSchedulePayload(prayerTimes, settings);
 
   const lastHash = await AsyncStorage.getItem(SCHEDULED_HASH_KEY);
-  
-  // Hash değişmemiş olsa bile, eğer kullanıcı "bildirim gelmedi" diyorsa
-  // belki ilk kurulumda hata oldu. Debug için bu kontrolü geçici olarak kaldırabilirsin
-  // ya da HASH_KEY adını değiştirdiğimiz için zaten tekrar kuracak.
+
   if (lastHash === hash) {
     console.log('LOG: Bildirimler güncel, işlem yapılmadı.');
     return;
@@ -299,7 +296,7 @@ async function scheduleDailyNotifications(
 
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: `Vakit Geldi`, 
+        title: `Vakit Geldi`,
         body: `${p.name} vakti girdi.`,
         sound: 'default',
       },
@@ -317,8 +314,6 @@ async function scheduleDailyNotifications(
   }
 
   await AsyncStorage.setItem(SCHEDULED_HASH_KEY, hash);
-  // Kullanıcıya bilgi verebiliriz (isteğe bağlı)
-  // Alert.alert('Bilgi', 'Bildirimler güncellendi.');
 }
 
 function useSetupAndroidNotificationChannel() {
@@ -570,7 +565,7 @@ export default function HomeScreen() {
     }, 1000);
 
     return () => clearInterval(intervalId);
-  }, [times]);
+  }, [times, setCurrentPrayer, setNextPrayer, setTimeRemaining]);
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
@@ -578,6 +573,7 @@ export default function HomeScreen() {
         barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
       />
       <ThemedView style={styles.container}>
+        {/* ÜST ADMOB */}
         <View style={styles.bannerTopWrapper}>
           <View style={styles.bannerInner}>
             <AdmobBanner />
@@ -588,6 +584,7 @@ export default function HomeScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* HEADER */}
           <View style={styles.headerRow}>
             <View>
               <ThemedText style={styles.appTitle}>Vakit Rehberi</ThemedText>
@@ -599,17 +596,18 @@ export default function HomeScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.locationButton, { borderColor: mainAccentColor }]}
+              style={[styles.locationButton, { borderColor: '#e1c564' }]}
               onPress={() => router.push('/select-location')}
             >
               <ThemedText
-                style={[styles.locationButtonText, { color: mainAccentColor }]}
+                style={[styles.locationButtonText, { color: '#e1c564' }]}
               >
                 Konum Değiştir
               </ThemedText>
             </TouchableOpacity>
           </View>
 
+          {/* HATA MESAJI */}
           {error && (
             <View style={styles.errorBox}>
               <ThemedText style={styles.errorText}>{error}</ThemedText>
@@ -624,13 +622,14 @@ export default function HomeScreen() {
             </View>
           )}
 
+          {/* ŞU ANKİ VAKİT CARD */}
           {times && (
             <View
               style={[
                 styles.currentCard,
                 {
-                  backgroundColor: cardBackgroundColor,
-                  borderColor,
+                  backgroundColor: '#090906',
+                  borderColor: '#e1af64ff',
                 },
               ]}
             >
@@ -667,14 +666,9 @@ export default function HomeScreen() {
             </View>
           )}
 
+          {/* PREMIUM GOLD TABLO */}
           {times && (
-            <ThemedText style={styles.sectionTitle}>
-              Günlük Namaz Vakitleri
-            </ThemedText>
-          )}
-
-          {times && (
-            <View style={styles.prayerList}>
+            <View style={styles.premiumTable}>
               {[
                 { label: 'İmsak', value: times.imsak },
                 { label: 'Güneş', value: times.gunes },
@@ -682,27 +676,23 @@ export default function HomeScreen() {
                 { label: 'İkindi', value: times.ikindi },
                 { label: 'Akşam', value: times.aksam },
                 { label: 'Yatsı', value: times.yatsi },
-              ].map((item) => {
+              ].map((item, index, arr) => {
+                const isLast = index === arr.length - 1;
                 const isCurrent = item.label === currentPrayer;
-                const containerStyle = [
-                  styles.prayerRow,
-                  {
-                    backgroundColor: cardBackgroundColor,
-                    borderColor: isCurrent ? highlightColor : borderColor,
-                  },
-                ];
-
-                const timeStyle: TextStyle = {
-                  ...styles.prayerTime,
-                  color: isCurrent ? highlightColor : undefined,
-                };
 
                 return (
-                  <View key={item.label} style={containerStyle}>
-                    <ThemedText style={styles.prayerName}>
+                  <View
+                    key={item.label}
+                    style={[
+                      styles.premiumRow,
+                      isLast && styles.premiumRowLast,
+                      isCurrent && styles.premiumRowActive,
+                    ]}
+                  >
+                    <ThemedText style={styles.premiumLabel}>
                       {item.label}
                     </ThemedText>
-                    <ThemedText style={timeStyle}>
+                    <ThemedText style={styles.premiumTime}>
                       {item.value || '--:--'}
                     </ThemedText>
                   </View>
@@ -712,9 +702,9 @@ export default function HomeScreen() {
           )}
         </ScrollView>
 
+        {/* ALT ADMOB AYRACI (BOŞ KUTU) */}
         <View style={styles.bannerBottomWrapper}>
-          <View style={styles.bannerInner}>
-          </View>
+          <View style={styles.bannerInner} />
         </View>
       </ThemedView>
     </SafeAreaView>
@@ -729,10 +719,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'space-between',
+    backgroundColor: '#090906',
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 30,
+    paddingTop: 3,
     paddingBottom: 104,
     gap: 16,
   },
@@ -745,11 +736,13 @@ const styles = StyleSheet.create({
   appTitle: {
     fontSize: 24,
     fontWeight: '700',
+    color: '#e1c564',
   } as TextStyle,
   locationText: {
     marginTop: 4,
     fontSize: 14,
     opacity: 0.8,
+    color: '#e1c564',
   } as TextStyle,
   locationButton: {
     paddingHorizontal: 12,
@@ -800,6 +793,7 @@ const styles = StyleSheet.create({
   currentLabel: {
     fontSize: 13,
     opacity: 0.8,
+    color: '#e1af64ff',
   } as TextStyle,
   currentName: {
     fontSize: 22,
@@ -813,10 +807,12 @@ const styles = StyleSheet.create({
   nextLabel: {
     fontSize: 12,
     opacity: 0.7,
+    color: '#e1af64ff',
   } as TextStyle,
   nextName: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#e1af64ff',
   } as TextStyle,
   countdownBox: {
     alignItems: 'flex-end',
@@ -824,19 +820,24 @@ const styles = StyleSheet.create({
   countdownLabel: {
     fontSize: 12,
     opacity: 0.7,
+    color: '#e1af64ff',
   } as TextStyle,
   countdownValue: {
     marginTop: 2,
     fontSize: 18,
     fontVariant: ['tabular-nums'],
     fontWeight: '600',
+    color: '#e1af64ff',
   } as TextStyle,
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     marginTop: 8,
     marginBottom: 4,
+    color: '#e1af64ff',
   } as TextStyle,
+
+  // Eski liste stilleri (kullanmasan da kalabilir)
   prayerList: {
     gap: 8,
   },
@@ -862,6 +863,44 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontVariant: ['tabular-nums'],
   } as TextStyle,
+
+  // --- PREMIUM GOLD TABLE (görseldeki gibi) ---
+  premiumTable: {
+    backgroundColor: '#0b0b0a',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#e1c56433',
+    marginTop: 6,
+  },
+  premiumRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e1c56422',
+  },
+  premiumRowLast: {
+    borderBottomWidth: 0,
+  },
+  premiumRowActive: {
+    backgroundColor: 'rgba(225,197,100,0.06)',
+  },
+  premiumLabel: {
+    color: '#e1c564',
+    fontSize: 15,
+    fontWeight: '500',
+  } as TextStyle,
+  premiumTime: {
+    color: '#e1c564',
+    fontSize: 15,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  } as TextStyle,
+
   bannerTopWrapper: {
     paddingHorizontal: 16,
     paddingTop: 8,

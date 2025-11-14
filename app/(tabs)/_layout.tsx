@@ -11,25 +11,32 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { MaterialIcons } from '@expo/vector-icons';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme() ?? 'light';
+  const colorScheme = useColorScheme() ?? 'dark';
   const theme = Colors[colorScheme];
 
+  // Dark + Gold palet
+  const tabBarBackground = '#0b0b0a';
+  const tabBarBorderColor = '#e1c56433';
+  const activeTintColor = '#e1c564';
+  const inactiveTintColor = '#7f7f7f';
+  const screenBackground = '#090906';
+
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: screenBackground }]}>
       {/* TABBAR + SAYFALAR */}
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: theme.tabIconSelected,
-          tabBarInactiveTintColor: theme.tabIconDefault,
+          tabBarActiveTintColor: activeTintColor,
+          tabBarInactiveTintColor: inactiveTintColor,
           tabBarButton: HapticTab,
           tabBarStyle: {
             borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: '#e0e0e0',
+            borderTopColor: tabBarBorderColor,
             height: 56,
             paddingBottom: 4,
             paddingTop: 4,
-            backgroundColor: theme.background,
+            backgroundColor: tabBarBackground,
 
             // Tab bar'ı biraz yukarı alıyoruz ki altına AdMob sığsın
             position: 'absolute',
@@ -56,7 +63,7 @@ export default function TabLayout() {
           options={{
             title: 'Aylık Takvim',
             tabBarIcon: ({ color, size }) => (
-      <MaterialIcons name="date-range" size={size} color={color} />
+              <MaterialIcons name="date-range" size={size} color={color} />
             ),
           }}
         />
@@ -88,7 +95,10 @@ export default function TabLayout() {
       <View
         style={[
           styles.adContainer,
-          { backgroundColor: theme.background },
+          {
+            backgroundColor: screenBackground,
+            borderTopColor: tabBarBorderColor,
+          },
         ]}
       >
         <AdmobBanner />
@@ -107,6 +117,5 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e0e0e0',
   },
 });
