@@ -13,9 +13,12 @@ module.exports = function (api) {
           extensions: ['.js', '.jsx', '.ts', '.tsx'],
         },
       ],
-      // ❌ Bunu kaldırdık: 'expo-router/babel'
-      require.resolve("expo-router/plugin"), // ✅ SDK 50+ için doğru kullanım
+      // 🚀 This is the correct way to include the Expo Router plugin 
+      // for all recent SDKs (v49, v50, etc.):
+      'expo-router/babel', 
+      
+      // If you are using Reanimated, ensure its plugin is the very last one.
+      // 'react-native-reanimated/plugin', 
     ],
   };
 };
-A
