@@ -31,7 +31,11 @@
       ]
     },
 
-    "plugins": ["expo-asset", "expo-audio"],
+    "plugins": [
+      "expo-asset",
+      "expo-audio",
+      "expo-background-fetch"
+    ],
 
     "extra": {
       "eas": {

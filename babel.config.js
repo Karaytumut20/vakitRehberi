@@ -13,9 +13,7 @@ module.exports = function (api) {
           extensions: ['.js', '.jsx', '.ts', '.tsx'],
         },
       ],
-      // ❌ Bunu kaldırdık: 'expo-router/babel'
-      require.resolve("expo-router/plugin"), // ✅ SDK 50+ için doğru kullanım
+      'expo-router/babel',
     ],
   };
 };
-A
