@@ -1,12 +1,9 @@
 // app/(tabs)/index.tsx
 
+// app/(tabs)/index.tsx
+
 import AdmobBanner from '@/components/AdmobBanner';
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState
-} from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Platform,
   ScrollView,
@@ -14,92 +11,32 @@ import {
   StyleSheet,
   TextStyle,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import {
+  CachedPrayerData,
+  LocationData,
+  PrayerName,
+  PRAYER_NAMES_ORDER,
+  PrayerTimeData,
+} from '@/constants/types';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import {
+  scheduleDailyNotifications,
+  setForegroundAlerts,
+  setupAndroidNotificationChannel,
+} from '@/lib/notifications';
 
-/**
- * --- Tipler ---
- */
-
-interface PrayerTimeData {
-  imsak: string;
-  gunes: string;
-  ogle: string;
-  ikindi: string;
-  aksam: string;
-  yatsi: string;
-}
-
-interface LocationData {
-  id: string;
-  name: string;
-}
-
-interface CachedPrayerData {
-  locationId: string;
-  fetchDate: string;
-  monthlyTimes: any[];
-}
-
-type PrayerName = 'İmsak' | 'Güneş' | 'Öğle' | 'İkindi' | 'Akşam' | 'Yatsı';
-
-const PRAYER_NAMES_ORDER: PrayerName[] = [
-  'İmsak',
-  'Güneş',
-  'Öğle',
-  'İkindi',
-  'Akşam',
-  'Yatsı',
-];
-
-export interface PrayerSettings {
-  imsak: { adhan: boolean };
-  gunes: { adhan: boolean };
-  ogle: { adhan: boolean };
-  ikindi: { adhan: boolean };
-  aksam: { adhan: boolean };
-  yatsi: { adhan: boolean };
-}
-
-/**
- * --- Varsayılan Ayarlar --- 
- */
-export const DEFAULT_SETTINGS: PrayerSettings = {
-  imsak: { adhan: true },
-  gunes: { adhan: false },
-  ogle: { adhan: true },
-  ikindi: { adhan: true },
-  aksam: { adhan: true },
-  yatsi: { adhan: true },
-};
-
-export const SETTINGS_KEY = '@prayer_settings';
-
-/**
- * --- Bildirim Sabitleri ---
- */
-
-// Kanal ID'si
-const ANDROID_CHANNEL_ID = 'prayer_times_adhan_v1';
-const ANDROID_SOUND_NAME = 'adhan.wav';
-
-// v3: Gün + hash meta
-const SCHEDULED_META_KEY = '@prayer_scheduled_meta_v3';
-
-interface ScheduleMeta {
-  hash: string;
-  date: string; // YYYY-MM-DD
-}
+// Uygulama açıkken bildirim gelmesi için true yapıldı
+setForegroundAlerts(true);
 
 /**
  * --- Yardımcı Fonksiyonlar ---
@@ -131,24 +68,6 @@ function timeToDateBase(timeString: string): Date {
   return d;
 }
 
-/**
- * Bu fonksiyon, verilen saat eğer geçmişteyse
- * otomatik olarak bir sonraki güne kaydırır (ertesi gün aynı saat).
- */
-function safeTimeToFutureDate(
-  timeString: string,
-  now: Date = new Date()
-): Date {
-  const candidate = timeToDateBase(timeString);
-
-  if (candidate.getTime() <= now.getTime()) {
-    // Geçmiş vakit → ertesi günün aynı saati
-    return new Date(candidate.getTime() + 24 * 60 * 60 * 1000);
-  }
-
-  return candidate;
-}
-
 function formatTimeRemaining(ms: number): string {
   if (ms < 0) return '00:00:00';
 
@@ -161,226 +80,11 @@ function formatTimeRemaining(ms: number): string {
 }
 
 /**
- * --- Bildirim Davranışı (Uygulama açıkken de gözüksün) ---
- */
-
-function setForegroundAlerts(enabled: boolean) {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => {
-      const behavior: any = {
-        shouldShowAlert: enabled,
-        shouldPlaySound: enabled,
-        shouldSetBadge: false,
-      };
-
-      if (Platform.OS === 'ios') {
-        (behavior as any).shouldShowBanner = enabled;
-      }
-
-      return behavior as Notifications.NotificationBehavior;
-    },
-  });
-}
-
-// Uygulama açıkken bildirim gelmesi için true yapıldı
-setForegroundAlerts(true);
-
-async function getMergedSettings(): Promise<PrayerSettings> {
-  try {
-    const saved = await AsyncStorage.getItem(SETTINGS_KEY);
-    if (!saved) return DEFAULT_SETTINGS;
-
-    const parsed = JSON.parse(saved);
-
-    return {
-      ...DEFAULT_SETTINGS,
-      ...parsed,
-      imsak: { ...DEFAULT_SETTINGS.imsak, ...(parsed.imsak || {}) },
-      gunes: { ...DEFAULT_SETTINGS.gunes, ...(parsed.gunes || {}) },
-      ogle: { ...DEFAULT_SETTINGS.ogle, ...(parsed.ogle || {}) },
-      ikindi: { ...DEFAULT_SETTINGS.ikindi, ...(parsed.ikindi || {}) },
-      aksam: { ...DEFAULT_SETTINGS.aksam, ...(parsed.aksam || {}) },
-      yatsi: { ...DEFAULT_SETTINGS.yatsi, ...(parsed.yatsi || {}) },
-    };
-  } catch (e) {
-    console.warn('getMergedSettings error:', e);
-    return DEFAULT_SETTINGS;
-  }
-}
-
-interface ScheduleItem {
-  key: keyof PrayerSettings;
-  name: PrayerName;
-  time: string;
-  enabled: boolean;
-}
-
-interface SchedulePayload {
-  list: ScheduleItem[];
-  hash: string;
-}
-
-function buildSchedulePayload(
-  times: PrayerTimeData,
-  settings: PrayerSettings
-): SchedulePayload {
-  const baseList: ScheduleItem[] = [
-    {
-      key: 'imsak',
-      name: 'İmsak',
-      time: times.imsak,
-      enabled: settings.imsak.adhan,
-    },
-    {
-      key: 'gunes',
-      name: 'Güneş',
-      time: times.gunes,
-      enabled: settings.gunes.adhan,
-    },
-    {
-      key: 'ogle',
-      name: 'Öğle',
-      time: times.ogle,
-      enabled: settings.ogle.adhan,
-    },
-    {
-      key: 'ikindi',
-      name: 'İkindi',
-      time: times.ikindi,
-      enabled: settings.ikindi.adhan,
-    },
-    {
-      key: 'aksam',
-      name: 'Akşam',
-      time: times.aksam,
-      enabled: settings.aksam.adhan,
-    },
-    {
-      key: 'yatsi',
-      name: 'Yatsı',
-      time: times.yatsi,
-      enabled: settings.yatsi.adhan,
-    },
-  ];
-
-  const list = baseList.filter((x) => x.enabled);
-
-  const normalized = list
-    .map((x) => ({ k: x.key, t: x.time }))
-    .sort((a, b) => String(a.k).localeCompare(String(b.k)));
-
-  const hash = JSON.stringify(normalized);
-
-  return { list, hash };
-}
-
-/**
- * --- EZAN BİLDİRİMLERİ PLANLAMA (REVİZE) ---
- *
- * 1. Aynı gün ve aynı hash için tekrar planlama YAPMAZ
- * 2. Yeni güne geçildiğinde, hash değiştiğinde veya saatler değiştiğinde
- *    önce eski bildirimleri temizler → sonra yenilerini planlar
- * 3. Geçmiş vakitleri ertesi güne kaydırır (ANINDA 4–5 bildirim patlamaz)
- */
-
-async function scheduleDailyNotifications(
-  prayerTimes: PrayerTimeData
-): Promise<void> {
-  // 1) İzin kontrolü
-  let { status: existingStatus } = await Notifications.getPermissionsAsync();
-
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    existingStatus = status;
-  }
-
-  if (existingStatus !== 'granted') {
-    console.log('Bildirim izni verilmedi.');
-    return;
-  }
-
-  // 2) Ayarlar + payload
-  const settings = await getMergedSettings();
-  const { list, hash } = buildSchedulePayload(prayerTimes, settings);
-  const today = getTodayDate();
-
-  // 3) Eski meta'yı oku
-  let meta: ScheduleMeta | null = null;
-  try {
-    const metaJson = await AsyncStorage.getItem(SCHEDULED_META_KEY);
-    if (metaJson) {
-      meta = JSON.parse(metaJson) as ScheduleMeta;
-    }
-  } catch (e) {
-    console.warn('scheduleDailyNotifications meta parse error:', e);
-  }
-
-  // 4) Aynı gün ve aynı hash ise tekrar planlama YAPMA
-  if (meta && meta.date === today && meta.hash === hash) {
-    console.log(
-      'LOG: Bildirimler zaten bugünün vakitlerine göre planlanmış, tekrar kurulmadı.'
-    );
-    return;
-  }
-
-  // 5) Eski planlanmış bildirimleri temizle (önceki gün / eski konum / eski ayarlar)
-  await Notifications.cancelAllScheduledNotificationsAsync();
-  console.log('LOG: Önceki tüm planlanmış bildirimler temizlendi.');
-
-  const now = new Date();
-
-  // 6) Her vakit için planlama
-  for (const p of list) {
-    const date = safeTimeToFutureDate(p.time, now);
-
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Vakit Geldi',
-        body: `${p.name} vakti girdi.`,
-        sound: ANDROID_SOUND_NAME,
-      },
-      trigger: {
-        date,
-        ...(Platform.OS === 'android'
-          ? ({ channelId: ANDROID_CHANNEL_ID } as any)
-          : {}),
-      },
-    });
-
-    console.log(
-      `LOG: Planlandı -> ${p.name} saat: ${date.toLocaleString('tr-TR')}`
-    );
-  }
-
-  // 7) Yeni meta'yı kaydet
-  const newMeta: ScheduleMeta = { hash, date: today };
-  await AsyncStorage.setItem(SCHEDULED_META_KEY, JSON.stringify(newMeta));
-  console.log('LOG: Yeni bildirim meta kaydedildi:', newMeta);
-}
-
-/**
  * --- Android Bildirim Kanalı ---
  */
-
 function useSetupAndroidNotificationChannel() {
   useEffect(() => {
-    if (Platform.OS !== 'android') return;
-
-    (async () => {
-      try {
-        await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-          name: 'Namaz Vakitleri',
-          importance: Notifications.AndroidImportance.MAX,
-          enableVibrate: true,
-          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-          sound: ANDROID_SOUND_NAME,
-        });
-
-        console.log('LOG: Android bildirim kanalı (Adhan) ayarlandı.');
-      } catch (e) {
-        console.warn('Android channel setup error:', e);
-      }
-    })();
+    setupAndroidNotificationChannel();
   }, []);
 }
 
