@@ -1,19 +1,14 @@
 // app/(tabs)/index.tsx
 
 import AdmobBanner from '@/components/AdmobBanner';
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState
-} from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ScrollView,
   StatusBar,
   StyleSheet,
   TextStyle,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -26,11 +21,12 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 // -------------------------------------------
-// 🔔 Yeni notification sistemi (TEK KULLANILACAK YER)
+// 🔔 GÜNCELLENMİŞ NOTIFICATION SİSTEMİ
 // -------------------------------------------
 import {
+  MonthlyPrayerDay, // YENİ TİP (lib/notifications.ts'ten)
   PrayerTimeData,
-  schedulePrayerNotificationsForToday
+  schedulePrayerNotificationsFor15Days, // YENİ FONKSİYON
 } from '@/lib/notifications';
 
 // --------------------------------------------------
@@ -45,7 +41,7 @@ interface LocationData {
 interface CachedPrayerData {
   locationId: string;
   fetchDate: string;
-  monthlyTimes: any[];
+  monthlyTimes: MonthlyPrayerDay[]; // Tipi MonthlyPrayerDay[] olarak güncelledik
 }
 
 type PrayerName = 'İmsak' | 'Güneş' | 'Öğle' | 'İkindi' | 'Akşam' | 'Yatsı';
@@ -107,7 +103,12 @@ function formatTimeRemaining(ms: number): string {
 // --------------------------------------------------
 
 export default function HomeScreen() {
+  // Sadece bugünün vakitlerini (UI için) tutar
   const [times, setTimes] = useState<PrayerTimeData | null>(null);
+  // 15 günlük bildirim için TÜM aylık veriyi tutar
+  const [monthlyTimes, setMonthlyTimes] = useState<MonthlyPrayerDay[] | null>(
+    null
+  );
   const [selectedLocation, setSelectedLocation] =
     useState<LocationData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -121,25 +122,26 @@ export default function HomeScreen() {
   const router = useRouter();
   const highlightColor = useThemeColor({}, 'highlight');
 
-  // Duplicate schedule önlemek için
-  const lastScheduledTimesJsonRef = useRef<string | null>(null);
+  // --- ISTEK UZERINE KALDIRILDI ---
+  // const lastScheduledTimesJsonRef = useRef<string | null>(null);
 
   // ----------------------------------------------------------------------
-  // 🔔 Namaz vakitleri yüklendiğinde bildirimleri PLANLA (TEK NOKTA)
+  // 🔔 Namaz vakitleri yüklendiğinde bildirimleri PLANLA (GÜNCELLENDİ)
   // ----------------------------------------------------------------------
   useEffect(() => {
-    if (!times || !selectedLocation) return;
+    // Artık 'times' (bugün) değil, 'monthlyTimes' (tüm ay) verisini bekliyoruz
+    if (!monthlyTimes || !selectedLocation) return;
 
-    const json = JSON.stringify(times);
-    if (json === lastScheduledTimesJsonRef.current) {
-      return; // aynı vakitler tekrar planlanmasın
-    }
+    // --- ISTEK UZERINE KONTROL KALDIRILDI ---
+    // Artık 'useFocusEffect' her tetiklendiğinde
+    // bildirimler yeniden planlanacak.
+    // --- KONTROL SONU ---
 
-    schedulePrayerNotificationsForToday(times, selectedLocation.id)
-      .catch((e) => console.warn('schedule error:', e));
-
-    lastScheduledTimesJsonRef.current = json;
-  }, [times, selectedLocation]);
+    // 'schedulePrayerNotificationsForToday' yerine YENİ fonksiyonu çağırıyoruz
+    schedulePrayerNotificationsFor15Days(monthlyTimes, selectedLocation.id).catch(
+      (e) => console.warn('15-day schedule error:', e)
+    );
+  }, [monthlyTimes, selectedLocation]); // <-- Bağımlılık 'monthlyTimes'a değiştirdik
 
   // ----------------------------------------------------------------------
   // Konumu & vakitleri yükleme
@@ -169,12 +171,17 @@ export default function HomeScreen() {
       if (cachedDataJson) {
         const cached: CachedPrayerData = JSON.parse(cachedDataJson);
 
-        if (cached.fetchDate === TODAY_DATE && cached.locationId === location.id) {
+        if (
+          cached.fetchDate === TODAY_DATE &&
+          cached.locationId === location.id
+        ) {
+          console.log('LOG: Vakitler (UI) için KEŞ kullanılıyor.');
           processApiData(cached.monthlyTimes);
           return;
         }
       }
 
+      console.log('LOG: Vakitler için API\'den taze veri çekiliyor.');
       await fetchPrayerTimes(location.id, TODAY_DATE);
     } catch (e) {
       console.warn('checkLocation error:', e);
@@ -185,6 +192,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      console.log('LOG: Anasayfaya odaklanıldı, vakitler kontrol ediliyor...');
       checkLocationAndFetchTimes();
     }, [checkLocationAndFetchTimes])
   );
@@ -202,7 +210,7 @@ export default function HomeScreen() {
         throw new Error(`Vakitler alınamadı (HTTP ${res.status}).`);
       }
 
-      const monthly = await res.json();
+      const monthly: MonthlyPrayerDay[] = await res.json();
       processApiData(monthly);
 
       const cache: CachedPrayerData = {
@@ -219,7 +227,8 @@ export default function HomeScreen() {
     }
   }
 
-  function processApiData(monthlyTimesArray: any[]) {
+  // processApiData GÜNCELLENDİ
+  function processApiData(monthlyTimesArray: MonthlyPrayerDay[]) {
     try {
       if (!Array.isArray(monthlyTimesArray) || monthlyTimesArray.length === 0) {
         throw new Error('API yanıtı geçersiz.');
@@ -232,9 +241,12 @@ export default function HomeScreen() {
           typeof d.date === 'string' && d.date.startsWith(TODAY_DATE)
       );
 
+      // Eğer bugünün tarihini bulamazsa (gece 12'yi geçmiş olabilir),
+      // listedeki ilk günü al (genelde o gün olur)
       if (!todayTimes) todayTimes = monthlyTimesArray[0];
 
       if (todayTimes) {
+        // 1. Bugünü UI için state'e at
         setTimes({
           imsak: todayTimes.fajr,
           gunes: todayTimes.sun,
@@ -243,6 +255,10 @@ export default function HomeScreen() {
           aksam: todayTimes.maghrib,
           yatsi: todayTimes.isha,
         });
+
+        // 2. TÜM VERİYİ bildirim sistemi için state'e at
+        // Bu, yukarıdaki 'useEffect'i tetikleyecek.
+        setMonthlyTimes(monthlyTimesArray);
       } else {
         setError('Veri bulundu ancak işlenemedi.');
       }
@@ -255,7 +271,7 @@ export default function HomeScreen() {
   }
 
   // ----------------------------------------------------------------------
-  // ⏱ Kalan süre & Mevcut vakit hesaplama (dokunmadım)
+  // ⏱ Kalan süre & Mevcut vakit hesaplama (dokunulmadı)
   // ----------------------------------------------------------------------
   useEffect(() => {
     if (!times) return;
@@ -280,10 +296,10 @@ export default function HomeScreen() {
       const tomorrowBase = new Date(now.getTime() + 24 * 60 * 60 * 1000);
       const nextImsak = timeToDateBase(times.imsak, tomorrowBase);
 
-const allPrayerEntries = [
-  ...allTimesToday,
-  { name: 'İmsak' as PrayerName, time: nextImsak }
-];
+      const allPrayerEntries = [
+        ...allTimesToday,
+        { name: 'İmsak' as PrayerName, time: nextImsak },
+      ];
 
       let nextPrayerEntry: { name: PrayerName; time: Date } | null = null;
       let minPositiveDiff = Infinity;
@@ -388,10 +404,7 @@ const allPrayerEntries = [
                 Şu anki vakit
               </ThemedText>
               <ThemedText
-                style={[
-                  styles.currentName,
-                  { color: highlightColor },
-                ]}
+                style={[styles.currentName, { color: highlightColor }]}
               >
                 {currentPrayer ?? '—'}
               </ThemedText>
@@ -420,7 +433,7 @@ const allPrayerEntries = [
           {/* PREMIUM GOLD TABLO */}
           {times && (
             <View style={styles.premiumTable}>
-              {[ 
+              {[
                 { label: 'İmsak', value: times.imsak },
                 { label: 'Güneş', value: times.gunes },
                 { label: 'Öğle', value: times.ogle },
