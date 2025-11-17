@@ -1,96 +1,213 @@
 // lib/notifications.ts
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-// Android notification channel & sound
-const ANDROID_CHANNEL_ID = 'prayer_times_adhan_v1';
-const ANDROID_SOUND_NAME = 'adhan.wav';
+/**
+ * İbadet vakti tipleri
+ */
+export interface PrayerTimeData {
+  imsak: string;
+  gunes: string;
+  ogle: string;
+  ikindi: string;
+  aksam: string;
+  yatsi: string;
+}
 
-// --------------------------------------------------
-// Global notification handler
-// --------------------------------------------------
+const META_STORAGE_KEY = 'prayerNotificationMeta_v1';
+
+// Meta bilgisi: Bugün için hangi saatler ile planlama yaptık?
+interface NotificationMeta {
+  date: string; // YYYY-MM-DD
+  hash: string; // Saatlerin hash'i (JSON)
+  locationId?: string; // Konum ID'si (şehir vs.)
+}
+
+// Bildirim handler: Uygulama ön plandayken bile alert göstersin.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
-    shouldPlaySound: true,
+    shouldPlaySound: true, // Cihazın default sesi
     shouldSetBadge: false,
   }),
 });
 
-// --------------------------------------------------
-// Bildirim izinlerini iste + Android kanalını oluştur
-// --------------------------------------------------
-export async function setupNotifications(): Promise<boolean> {
-  try {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
+/**
+ * Android için varsayılan bildirim kanalı oluştur.
+ * - Özel ses yok
+ * - Sadece cihazın default bildirim sesi
+ */
+export async function setupNotificationChannelAndroid() {
+  if (Platform.OS !== 'android') return;
 
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
+  await Notifications.setNotificationChannelAsync('default', {
+    name: 'İbadet Vakitleri',
+    importance: Notifications.AndroidImportance.HIGH,
+    // sound: undefined => default sistem sesi
+    sound: undefined,
+    enableVibrate: true,
+    vibrationPattern: [0, 250, 250, 250],
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+  });
 
-    if (finalStatus !== 'granted') {
-      console.log('Notification permission not granted.');
-      return false;
-    }
-
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-        name: 'Ezan Notifications',
-        importance: Notifications.AndroidImportance.MAX,
-        sound: ANDROID_SOUND_NAME,
-        vibrationPattern: [200, 100, 200],
-        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-      });
-    }
-
-    return true;
-  } catch (error) {
-    console.log('setupNotifications error:', error);
-    return false;
-  }
+  console.log('LOG: Android bildirim kanalı (default) ayarlandı.');
 }
 
-// --------------------------------------------------
-// Tüm eski planlanmış bildirimleri temizler
-// --------------------------------------------------
-export async function clearAllScheduledNotifications() {
-  try {
-    await Notifications.cancelAllScheduledNotificationsAsync();
-    console.log('All scheduled notifications cancelled.');
-  } catch (error) {
-    console.log('clearAllScheduledNotifications error:', error);
-  }
+/**
+ * Bildirim iznini iste.
+ */
+export async function ensureNotificationPermission() {
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  if (existingStatus === 'granted') return true;
+
+  const { status } = await Notifications.requestPermissionsAsync();
+  return status === 'granted';
 }
 
-// --------------------------------------------------
-// Saniye bazlı ezan bildirimi planlar
-// --------------------------------------------------
-export async function scheduleAdhanNotificationInSeconds(
-  seconds: number,
-  prayerName: string
-): Promise<void> {
+/**
+ * "YYYY-MM-DD" stringini üret (bugünün tarihi)
+ */
+function getTodayDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Saat stringini ("HH:mm") alıp bugünün tarihine göre Date objesi üret.
+ */
+function makeDateForToday(time: string): Date | null {
+  if (!time) return null;
+  const [hStr, mStr] = time.split(':');
+  const hour = Number(hStr);
+  const minute = Number(mStr);
+
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return null;
+
+  const now = new Date();
+  const d = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    hour,
+    minute,
+    0,
+    0
+  );
+  return d;
+}
+
+/**
+ * Vakitleri hash'leyerek o gün için aynı planlamayı iki kere yapmamayı sağlar.
+ */
+function createPrayerHash(times: PrayerTimeData): string {
+  const arr = [
+    { k: 'imsak', t: times.imsak },
+    { k: 'gunes', t: times.gunes },
+    { k: 'ogle', t: times.ogle },
+    { k: 'ikindi', t: times.ikindi },
+    { k: 'aksam', t: times.aksam },
+    { k: 'yatsi', t: times.yatsi },
+  ];
+
+  arr.sort((a, b) => a.k.localeCompare(b.k));
+  return JSON.stringify(arr);
+}
+
+/**
+ * Bugün için ibadet vakitleri bildirimlerini planla.
+ * - Geçmiş saatler için bildirim yaratmaz (Yani İmsak / Öğle geçmişse, atlanır)
+ * - Aynı gün, aynı vakitlerle yeniden planlama yapılmışsa tekrar schedule ETMEZ.
+ * - Uygulama açık/kapalı fark etmez, sistem kendisi tetikler.
+ */
+export async function schedulePrayerNotificationsForToday(
+  times: PrayerTimeData,
+  locationId?: string
+) {
+  const hasPermission = await ensureNotificationPermission();
+  if (!hasPermission) {
+    console.log('LOG: Bildirim izni verilmedi, scheduling iptal.');
+    return;
+  }
+
+  if (Platform.OS === 'android') {
+    await setupNotificationChannelAndroid();
+  }
+
+  const today = getTodayDateString();
+  const hash = createPrayerHash(times);
+
+  // Daha önce bugün için planlama yaptıysak tekrar yapma
   try {
-    console.log(
-      `Scheduling "${prayerName}" in ${seconds} seconds at`,
-      new Date(Date.now() + seconds * 1000).toISOString()
-    );
+    const rawMeta = await AsyncStorage.getItem(META_STORAGE_KEY);
+    if (rawMeta) {
+      const meta: NotificationMeta = JSON.parse(rawMeta);
+      if (meta.date === today && meta.hash === hash && meta.locationId === locationId) {
+        console.log(
+          'LOG: Bildirim planlama atlandı (aynı gün, aynı vakitler, aynı konum).'
+        );
+        return;
+      }
+    }
+  } catch (e) {
+    console.log('LOG: Meta okuma hatası:', e);
+  }
+
+  // Eski planlanmış bildirimleri temizle
+  await Notifications.cancelAllScheduledNotificationsAsync();
+  console.log('LOG: (schedule) Önceki tüm planlanmış bildirimler temizlendi.');
+
+  const now = new Date();
+
+  // Hangi vakitler için bildirim istiyorsan buraya ekle
+  const entries: Array<{ key: keyof PrayerTimeData; label: string }> = [
+    { key: 'imsak', label: 'İmsak' },
+    { key: 'ogle', label: 'Öğle' },
+    { key: 'ikindi', label: 'İkindi' },
+    { key: 'aksam', label: 'Akşam' },
+    { key: 'yatsi', label: 'Yatsı' },
+    // Eğer Güneş için de bildirim istiyorsan alttaki satırı aç:
+    // { key: 'gunes', label: 'Güneş' },
+  ];
+
+  for (const entry of entries) {
+    const timeStr = times[entry.key];
+    const fireDate = makeDateForToday(timeStr);
+
+    if (!fireDate) {
+      console.log(
+        `LOG: Atlandı -> ${entry.label} (${timeStr}) (geçersiz saat formatı)`
+      );
+      continue;
+    }
+
+    // Geçmişte kalan vakitleri planlama
+    if (fireDate.getTime() <= now.getTime()) {
+      console.log(
+        `LOG: Atlandı -> ${entry.label} saat: ${fireDate.toLocaleString()} (geçmiş saat)`
+      );
+      continue;
+    }
 
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Vakit Rehberi',
-        body: `${prayerName} vaktine ulaşıldı`,
-        sound: ANDROID_SOUND_NAME,
+        title: `${entry.label} vakti geldi`,
+        body: `${entry.label} vakti girdi.`,
+        sound: undefined, // default sistem sesi
+        data: { prayerKey: entry.key, time: timeStr },
       },
-      trigger: {
-        seconds,
-        channelId: ANDROID_CHANNEL_ID,
-        repeats: false,
-      },
+      trigger: fireDate,
     });
-  } catch (error) {
-    console.log('scheduleAdhanNotificationInSeconds error:', error);
+
+    console.log(
+      `LOG: Planlandı -> ${entry.label} saat: ${fireDate.toLocaleString()}`
+    );
   }
+
+  const meta: NotificationMeta = { date: today, hash, locationId };
+  await AsyncStorage.setItem(META_STORAGE_KEY, JSON.stringify(meta));
+  console.log('LOG: Yeni bildirim meta kaydedildi:', JSON.stringify(meta));
 }

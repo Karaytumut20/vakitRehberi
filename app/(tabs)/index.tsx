@@ -8,7 +8,6 @@ import {
   useState
 } from 'react';
 import {
-  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -19,7 +18,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
@@ -27,18 +25,17 @@ import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
-/**
- * --- Tipler ---
- */
+// -------------------------------------------
+// 🔔 Yeni notification sistemi (TEK KULLANILACAK YER)
+// -------------------------------------------
+import {
+  PrayerTimeData,
+  schedulePrayerNotificationsForToday
+} from '@/lib/notifications';
 
-interface PrayerTimeData {
-  imsak: string;
-  gunes: string;
-  ogle: string;
-  ikindi: string;
-  aksam: string;
-  yatsi: string;
-}
+// --------------------------------------------------
+// TYPES
+// --------------------------------------------------
 
 interface LocationData {
   id: string;
@@ -62,49 +59,7 @@ const PRAYER_NAMES_ORDER: PrayerName[] = [
   'Yatsı',
 ];
 
-export interface PrayerSettings {
-  imsak: { adhan: boolean };
-  gunes: { adhan: boolean };
-  ogle: { adhan: boolean };
-  ikindi: { adhan: boolean };
-  aksam: { adhan: boolean };
-  yatsi: { adhan: boolean };
-}
-
-/**
- * --- Varsayılan Ayarlar --- 
- */
-export const DEFAULT_SETTINGS: PrayerSettings = {
-  imsak: { adhan: true },
-  gunes: { adhan: false },
-  ogle: { adhan: true },
-  ikindi: { adhan: true },
-  aksam: { adhan: true },
-  yatsi: { adhan: true },
-};
-
-export const SETTINGS_KEY = '@prayer_settings';
-
-/**
- * --- Bildirim Sabitleri ---
- */
-
-// Kanal ID'si
-const ANDROID_CHANNEL_ID = 'prayer_times_adhan_v1';
-const ANDROID_SOUND_NAME = 'adhan.wav';
-
-// v3: Gün + hash meta
-const SCHEDULED_META_KEY = '@prayer_scheduled_meta_v3';
-
-interface ScheduleMeta {
-  hash: string;
-  date: string; // YYYY-MM-DD
-}
-
-/**
- * --- Yardımcı Fonksiyonlar ---
- */
-
+// Tarih formatlayıcı
 function getTodayDate(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
@@ -113,20 +68,14 @@ function getTodayDate(): string {
   )}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// --- YENİ VE DÜZELTİLMİŞ FONKSİYON 1 ---
-/**
- * Verilen saat string'ini (örn: "04:30" veya "24:10")
- * DİKKATE ALARAK, temel tarihe (baseDate) uygular.
- */
+// Bir saati, verilen tarihe göre Date objesi yapma
 function timeToDateBase(timeString: string, baseDate: Date): Date {
   let t = timeString;
 
   if (typeof t !== 'string') {
-    console.warn(`timeToDateBase: Geçersiz saat: ${t} -> '00:00' kullanıldı`);
     t = '00:00';
   }
 
-  // "24:10" gibi bir saat gelirse, bunun bir sonraki güne ait 00:10 olduğunu not al
   let isNextDay = false;
   if (t.startsWith('24:')) {
     t = t.replace('24:', '00:');
@@ -134,42 +83,12 @@ function timeToDateBase(timeString: string, baseDate: Date): Date {
   }
 
   const [h, m] = t.split(':').map(Number);
-  
-  // Temel tarihi klonla, orijinalini bozma
   const d = new Date(baseDate.getTime());
   d.setHours(h || 0, m || 0, 0, 0);
 
-  // Eğer saat "24:xx" formatındaysa, tarihi bir gün ileri al
-  if (isNextDay) {
-    d.setDate(d.getDate() + 1);
-  }
-  
+  if (isNextDay) d.setDate(d.getDate() + 1);
+
   return d;
-}
-
-// --- YENİ VE DÜZELTİLMİŞ FONKSİYON 2 ---
-/**
- * Bu fonksiyon, verilen saatin "geçmişte" kalıp kalmadığını kontrol eder.
- * Eğer geçmişte kaldıysa (ve "24:xx" formatında değilse), 24 saat ekler.
- */
-function safeTimeToFutureDate(
-  timeString: string,
-  now: Date = new Date()
-): Date {
-  // 'now' değişkenini temel tarih olarak timeToDateBase'e yolla
-  const candidate = timeToDateBase(timeString, now);
-
-  // Eğer adayın saati '24:' ile başlamıyorsa (yani normal bir vakitse, örn: "04:30")
-  // VE 'şimdi'den önceyse (yani geçmişte kalmışsa)
-  if (!timeString.startsWith('24:') && candidate.getTime() <= now.getTime()) {
-    // 24 saat ekleyerek yarına planla
-    return new Date(candidate.getTime() + 24 * 60 * 60 * 1000);
-  }
-
-  // Aksi takdirde, aday zaten doğrudur:
-  // 1. "17:30" (gelecekteki bir vakit)
-  // 2. "24:10" (timeToDateBase bunu zaten "yarın 00:10" yaptı)
-  return candidate;
 }
 
 function formatTimeRemaining(ms: number): string {
@@ -183,236 +102,9 @@ function formatTimeRemaining(ms: number): string {
   return [h, m, s].map((v) => String(v).padStart(2, '0')).join(':');
 }
 
-/**
- * --- Bildirim Davranışı (Uygulama açıkken de gözüksün) ---
- */
-
-function setForegroundAlerts(enabled: boolean) {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => {
-      const behavior: any = {
-        shouldShowAlert: enabled,
-        shouldPlaySound: enabled,
-        shouldSetBadge: false,
-      };
-
-      if (Platform.OS === 'ios') {
-        (behavior as any).shouldShowBanner = enabled;
-      }
-
-      return behavior as Notifications.NotificationBehavior;
-    },
-  });
-}
-
-// Uygulama açıkken bildirim gelmesi için true yapıldı
-setForegroundAlerts(true);
-
-async function getMergedSettings(): Promise<PrayerSettings> {
-  try {
-    const saved = await AsyncStorage.getItem(SETTINGS_KEY);
-    if (!saved) return DEFAULT_SETTINGS;
-
-    const parsed = JSON.parse(saved);
-
-    return {
-      ...DEFAULT_SETTINGS,
-      ...parsed,
-      imsak: { ...DEFAULT_SETTINGS.imsak, ...(parsed.imsak || {}) },
-      gunes: { ...DEFAULT_SETTINGS.gunes, ...(parsed.gunes || {}) },
-      ogle: { ...DEFAULT_SETTINGS.ogle, ...(parsed.ogle || {}) },
-      ikindi: { ...DEFAULT_SETTINGS.ikindi, ...(parsed.ikindi || {}) },
-      aksam: { ...DEFAULT_SETTINGS.aksam, ...(parsed.aksam || {}) },
-      yatsi: { ...DEFAULT_SETTINGS.yatsi, ...(parsed.yatsi || {}) },
-    };
-  } catch (e) {
-    console.warn('getMergedSettings error:', e);
-    return DEFAULT_SETTINGS;
-  }
-}
-
-interface ScheduleItem {
-  key: keyof PrayerSettings;
-  name: PrayerName;
-  time: string;
-  enabled: boolean;
-}
-
-interface SchedulePayload {
-  list: ScheduleItem[];
-  hash: string;
-}
-
-function buildSchedulePayload(
-  times: PrayerTimeData,
-  settings: PrayerSettings
-): SchedulePayload {
-  const baseList: ScheduleItem[] = [
-    {
-      key: 'imsak',
-      name: 'İmsak',
-      time: times.imsak,
-      enabled: settings.imsak.adhan,
-    },
-    {
-      key: 'gunes',
-      name: 'Güneş',
-      time: times.gunes,
-      enabled: settings.gunes.adhan,
-    },
-    {
-      key: 'ogle',
-      name: 'Öğle',
-      time: times.ogle,
-      enabled: settings.ogle.adhan,
-    },
-    {
-      key: 'ikindi',
-      name: 'İkindi',
-      time: times.ikindi,
-      enabled: settings.ikindi.adhan,
-    },
-    {
-      key: 'aksam',
-      name: 'Akşam',
-      time: times.aksam,
-      enabled: settings.aksam.adhan,
-    },
-    {
-      key: 'yatsi',
-      name: 'Yatsı',
-      time: times.yatsi,
-      enabled: settings.yatsi.adhan,
-    },
-  ];
-
-  const list = baseList.filter((x) => x.enabled);
-
-  const normalized = list
-    .map((x) => ({ k: x.key, t: x.time }))
-    .sort((a, b) => String(a.k).localeCompare(String(b.k)));
-
-  const hash = JSON.stringify(normalized);
-
-  return { list, hash };
-}
-
-/**
- * --- EZAN BİLDİRİMLERİ PLANLAMA (REVİZE) ---
- *
- * 1. Aynı gün ve aynı hash için tekrar planlama YAPMAZ
- * 2. Yeni güne geçildiğinde, hash değiştiğinde veya saatler değiştiğinde
- * önce eski bildirimleri temizler → sonra yenilerini planlar
- * 3. Geçmiş vakitleri ertesi güne kaydırır (ANINDA 4–5 bildirim patlamaz)
- */
-
-async function scheduleDailyNotifications(
-  prayerTimes: PrayerTimeData
-): Promise<void> {
-  // 1) İzin kontrolü
-  let { status: existingStatus } = await Notifications.getPermissionsAsync();
-
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    existingStatus = status;
-  }
-
-  if (existingStatus !== 'granted') {
-    console.log('Bildirim izni verilmedi.');
-    return;
-  }
-
-  // 2) Ayarlar + payload
-  const settings = await getMergedSettings();
-  const { list, hash } = buildSchedulePayload(prayerTimes, settings);
-  const today = getTodayDate();
-
-  // 3) Eski meta'yı oku
-  let meta: ScheduleMeta | null = null;
-  try {
-    const metaJson = await AsyncStorage.getItem(SCHEDULED_META_KEY);
-    if (metaJson) {
-      meta = JSON.parse(metaJson) as ScheduleMeta;
-    }
-  } catch (e) {
-    console.warn('scheduleDailyNotifications meta parse error:', e);
-  }
-
-  // 4) Aynı gün ve aynı hash ise tekrar planlama YAPMA
-  if (meta && meta.date === today && meta.hash === hash) {
-    console.log(
-      'LOG: Bildirimler zaten bugünün vakitlerine göre planlanmış, tekrar kurulmadı.'
-    );
-    return;
-  }
-
-  // 5) Eski planlanmış bildirimleri temizle
-  // NOT: Bu kod, 'select-location.tsx' dosyasındaki iptal işlemine ek
-  // olarak bir güvencedir. (örn. gün değişimi, ayar değişimi için)
-  await Notifications.cancelAllScheduledNotificationsAsync();
-  console.log('LOG: (schedule) Önceki tüm planlanmış bildirimler temizlendi.');
-
-  const now = new Date();
-
-  // 6) Her vakit için planlama
-  for (const p of list) {
-    // DÜZELTME: 'safeTimeToFutureDate' artık doğru çalışıyor
-    const date = safeTimeToFutureDate(p.time, now);
-
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Vakit Geldi',
-        body: `${p.name} vakti girdi.`,
-        sound: ANDROID_SOUND_NAME,
-      },
-      trigger: {
-        date,
-        ...(Platform.OS === 'android'
-          ? ({ channelId: ANDROID_CHANNEL_ID } as any)
-          : {}),
-      },
-    });
-
-    console.log(
-      `LOG: Planlandı -> ${p.name} saat: ${date.toLocaleString('tr-TR')}`
-    );
-  }
-
-  // 7) Yeni meta'yı kaydet
-  const newMeta: ScheduleMeta = { hash, date: today };
-  await AsyncStorage.setItem(SCHEDULED_META_KEY, JSON.stringify(newMeta));
-  console.log('LOG: Yeni bildirim meta kaydedildi:', newMeta);
-}
-
-/**
- * --- Android Bildirim Kanalı ---
- */
-
-function useSetupAndroidNotificationChannel() {
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-
-    (async () => {
-      try {
-        await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-          name: 'Namaz Vakitleri',
-          importance: Notifications.AndroidImportance.MAX,
-          enableVibrate: true,
-          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-          sound: ANDROID_SOUND_NAME,
-        });
-
-        console.log('LOG: Android bildirim kanalı (Adhan) ayarlandı.');
-      } catch (e) {
-        console.warn('Android channel setup error:', e);
-      }
-    })();
-  }, []);
-}
-
-/**
- * --- Ana Ekran ---
- */
+// --------------------------------------------------
+// MAIN SCREEN
+// --------------------------------------------------
 
 export default function HomeScreen() {
   const [times, setTimes] = useState<PrayerTimeData | null>(null);
@@ -427,37 +119,32 @@ export default function HomeScreen() {
 
   const theme = useColorScheme() ?? 'light';
   const router = useRouter();
-
   const highlightColor = useThemeColor({}, 'highlight');
 
-  // Aynı times ile tekrar tekrar planlamayı engellemek için
+  // Duplicate schedule önlemek için
   const lastScheduledTimesJsonRef = useRef<string | null>(null);
 
-  useSetupAndroidNotificationChannel();
-
-  /**
-   * Vakitler her gün / konum değiştiğinde bildirim planlama
-   */
+  // ----------------------------------------------------------------------
+  // 🔔 Namaz vakitleri yüklendiğinde bildirimleri PLANLA (TEK NOKTA)
+  // ----------------------------------------------------------------------
   useEffect(() => {
-    if (!times) return;
+    if (!times || !selectedLocation) return;
 
     const json = JSON.stringify(times);
     if (json === lastScheduledTimesJsonRef.current) {
-      // Aynı vakitler → tekrar planlama yapma
-      return;
+      return; // aynı vakitler tekrar planlanmasın
     }
 
-    scheduleDailyNotifications(times).catch((e) =>
-      console.warn('scheduleDailyNotifications error:', e)
-    );
+    schedulePrayerNotificationsForToday(times, selectedLocation.id)
+      .catch((e) => console.warn('schedule error:', e));
 
     lastScheduledTimesJsonRef.current = json;
-  }, [times]);
+  }, [times, selectedLocation]);
 
-  
-  // DÜZELTME: 'times' bağımlılığını kaldırdık.
-  // Bu fonksiyonun 'times' state'ine ihtiyacı yok,
-  // sadece 'AsyncStorage'dan okuma yapmalı.
+  // ----------------------------------------------------------------------
+  // Konumu & vakitleri yükleme
+  // ----------------------------------------------------------------------
+
   const checkLocationAndFetchTimes = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -483,21 +170,18 @@ export default function HomeScreen() {
         const cached: CachedPrayerData = JSON.parse(cachedDataJson);
 
         if (cached.fetchDate === TODAY_DATE && cached.locationId === location.id) {
-          // ÖNEMLİ DÜZELTME: 'times' state'ini kontrol etmeyi bıraktık.
-          // Veri taze ve doğruysa, state'i her zaman güncellemeliyiz.
-          // Bu, 'processApiData'nın sadece bir kez çağrılmasını sağlar.
-          processApiData(cached.monthlyTimes, location.id);
+          processApiData(cached.monthlyTimes);
           return;
         }
       }
 
       await fetchPrayerTimes(location.id, TODAY_DATE);
     } catch (e) {
-      console.warn('checkLocationAndFetchTimes error:', e);
+      console.warn('checkLocation error:', e);
       setError('Hafıza okunurken hata oluştu.');
       setLoading(false);
     }
-  }, [router]); // 'times' bağımlılığı kaldırıldı
+  }, [router]);
 
   useFocusEffect(
     useCallback(() => {
@@ -519,7 +203,7 @@ export default function HomeScreen() {
       }
 
       const monthly = await res.json();
-      processApiData(monthly, locationId);
+      processApiData(monthly);
 
       const cache: CachedPrayerData = {
         locationId,
@@ -527,10 +211,7 @@ export default function HomeScreen() {
         monthlyTimes: monthly,
       };
 
-      await AsyncStorage.setItem(
-        '@cached_prayer_data',
-        JSON.stringify(cache)
-      );
+      await AsyncStorage.setItem('@cached_prayer_data', JSON.stringify(cache));
     } catch (e: any) {
       console.warn('fetchPrayerTimes error:', e);
       setError(e?.message ?? 'Vakitler çekilirken hata oluştu.');
@@ -538,7 +219,7 @@ export default function HomeScreen() {
     }
   }
 
-  function processApiData(monthlyTimesArray: any[], _locationId: string) {
+  function processApiData(monthlyTimesArray: any[]) {
     try {
       if (!Array.isArray(monthlyTimesArray) || monthlyTimesArray.length === 0) {
         throw new Error('API yanıtı geçersiz.');
@@ -551,11 +232,7 @@ export default function HomeScreen() {
           typeof d.date === 'string' && d.date.startsWith(TODAY_DATE)
       );
 
-      if (!todayTimes) {
-        // Bugünün vaktini bulamazsa, dizideki ilk günü kullan (genelde ayın 1'i)
-        // Bu, gece yarısı API'den henüz bugünün verisi gelmediyse bile uygulamanın çalışmasını sağlar
-        todayTimes = monthlyTimesArray[0]; 
-      }
+      if (!todayTimes) todayTimes = monthlyTimesArray[0];
 
       if (todayTimes) {
         setTimes({
@@ -577,88 +254,69 @@ export default function HomeScreen() {
     }
   }
 
-  // --- YENİ VE DÜZELTİLMİŞ GERİ SAYIM BLOĞU ---
-  /**
-   * --- Şu anki vakit, sonraki vakit ve geri sayım ---
-   */
+  // ----------------------------------------------------------------------
+  // ⏱ Kalan süre & Mevcut vakit hesaplama (dokunmadım)
+  // ----------------------------------------------------------------------
   useEffect(() => {
     if (!times) return;
 
     const intervalId = setInterval(() => {
-      const now = new Date(); // 'now' burada tanımlanıyor
+      const now = new Date();
 
-      // DÜZELTME: 'now' değişkenini timeToDateBase'e iletiyoruz
       const prayerDateTimes: Record<PrayerName, Date> = {
         İmsak: timeToDateBase(times.imsak, now),
         Güneş: timeToDateBase(times.gunes, now),
         Öğle: timeToDateBase(times.ogle, now),
         İkindi: timeToDateBase(times.ikindi, now),
         Akşam: timeToDateBase(times.aksam, now),
-        Yatsı: timeToDateBase(times.yatsi, now), // Artık '24:xx' saatleri doğru işlenecek
+        Yatsı: timeToDateBase(times.yatsi, now),
       };
 
-      // YENİ VE BASİT GERİ SAYIM MANTIĞI:
-      
-      // Bugünün tüm vakitlerini (Date objeleriyle) al
       const allTimesToday = PRAYER_NAMES_ORDER.map((name) => ({
         name,
         time: prayerDateTimes[name],
       }));
 
-      // Bir sonraki günün İmsak vaktini de hesaba kat
       const tomorrowBase = new Date(now.getTime() + 24 * 60 * 60 * 1000);
       const nextImsak = timeToDateBase(times.imsak, tomorrowBase);
 
-      // Bugünün vakitlerini + yarının ilk vaktini birleştir
-      const allPrayerEntries = [
-        ...allTimesToday,
-        {
-          name: 'İmsak' as PrayerName,
-          time: nextImsak,
-        },
-      ];
+const allPrayerEntries = [
+  ...allTimesToday,
+  { name: 'İmsak' as PrayerName, time: nextImsak }
+];
 
       let nextPrayerEntry: { name: PrayerName; time: Date } | null = null;
       let minPositiveDiff = Infinity;
 
-      // 'now'dan sonraki en yakın vakti bul
       for (const entry of allPrayerEntries) {
         const diff = entry.time.getTime() - now.getTime();
-
-        // Sadece gelecekteki vakitlere bak
         if (diff > 0 && diff < minPositiveDiff) {
           minPositiveDiff = diff;
           nextPrayerEntry = entry;
         }
       }
 
-      // Normalde bu 'if'e girmez ama garanti olsun
       if (!nextPrayerEntry) {
         nextPrayerEntry = { name: 'İmsak', time: nextImsak };
         minPositiveDiff = nextImsak.getTime() - now.getTime();
       }
 
-      // 'next' bulundu. 'current' ise 'next'ten bir öncekidir.
       setNextPrayer(nextPrayerEntry.name);
       setTimeRemaining(formatTimeRemaining(minPositiveDiff));
 
       const nextIndex = PRAYER_NAMES_ORDER.indexOf(nextPrayerEntry.name);
-      let currentIndex: number;
+      const currentIndex =
+        nextIndex === 0 ? PRAYER_NAMES_ORDER.length - 1 : nextIndex - 1;
 
-      if (nextIndex === 0) {
-        // Sonraki vakit İmsak ise, şu anki vakit Yatsı'dır
-        currentIndex = PRAYER_NAMES_ORDER.length - 1; // Yatsı
-      } else {
-        // Diğer durumlarda bir öncekidir
-        currentIndex = nextIndex - 1;
-      }
-      
       setCurrentPrayer(PRAYER_NAMES_ORDER[currentIndex]);
-
     }, 1000);
 
     return () => clearInterval(intervalId);
-  }, [times, setCurrentPrayer, setNextPrayer, setTimeRemaining]);
+  }, [times]);
+
+  // ---------------------------------------------------------
+  // UI (dokunulmadı)
+  // ---------------------------------------------------------
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
@@ -700,7 +358,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* HATA MESAJI */}
+          {/* ERROR */}
           {error && (
             <View style={styles.errorBox}>
               <ThemedText style={styles.errorText}>{error}</ThemedText>
@@ -715,7 +373,7 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* ŞU ANKİ VAKİT CARD */}
+          {/* ŞU ANKİ VAKİT */}
           {times && (
             <View
               style={[
@@ -762,7 +420,7 @@ export default function HomeScreen() {
           {/* PREMIUM GOLD TABLO */}
           {times && (
             <View style={styles.premiumTable}>
-              {[
+              {[ 
                 { label: 'İmsak', value: times.imsak },
                 { label: 'Güneş', value: times.gunes },
                 { label: 'Öğle', value: times.ogle },
@@ -795,7 +453,7 @@ export default function HomeScreen() {
           )}
         </ScrollView>
 
-        {/* ALT ADMOB AYRACI (BOŞ KUTU) */}
+        {/* ALT ADMOB */}
         <View style={styles.bannerBottomWrapper}>
           <View style={styles.bannerInner} />
         </View>
@@ -804,9 +462,9 @@ export default function HomeScreen() {
   );
 }
 
-/**
- * --- Stil Tanımları ---
- */
+// ---------------------------------------------------------
+// STYLES (dokunulmadı)
+// ---------------------------------------------------------
 
 const styles = StyleSheet.create({
   container: {
@@ -921,38 +579,6 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     fontWeight: '600',
     color: '#e1af64ff',
-  } as TextStyle,
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 8,
-    marginBottom: 4,
-    color: '#e1af64ff',
-  } as TextStyle,
-  prayerList: {
-    gap: 8,
-  },
-  prayerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  prayerName: {
-    fontSize: 15,
-    fontWeight: '500',
-  } as TextStyle,
-  prayerTime: {
-    fontSize: 15,
-    fontVariant: ['tabular-nums'],
   } as TextStyle,
   premiumTable: {
     backgroundColor: '#0b0b0a',

@@ -25,13 +25,13 @@
       "package": "com.anonymous.VakitRehberi",
       "permissions": [
         "POST_NOTIFICATIONS",
-        "SCHEDULE_EXACT_ALARM",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "SCHEDULE_EXACT_ALARM"
       ]
     },
 
-    "plugins": ["expo-asset", "expo-audio"],
+    "plugins": [
+      "expo-asset"
+    ],
 
     "extra": {
       "eas": {
