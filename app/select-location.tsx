@@ -1,6 +1,8 @@
 // app/select-location.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+// YENİ IMPORT: Bildirimleri iptal etmek için eklendi
+import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -135,16 +137,26 @@ export default function SelectLocationScreen() {
     }
   }
 
+  // --- BU FONKSİYON GÜNCELLENDİ ---
   async function handleSelectLocation(location: LocationData) {
     try {
+      // 1. ADIM: Konum seçildiği an tüm eski bildirimleri iptal et
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      console.log('LOG: Yeni konum seçildi, planlanmış tüm eski bildirimler iptal edildi.');
+
+      // 2. ADIM: Yeni konumu kaydet
       const selectedLocation = JSON.stringify(location);
       await AsyncStorage.setItem('@selected_location', selectedLocation);
+      
       Alert.alert('Başarılı', `${location.name} seçildi.`);
+
+      // 3. ADIM: Ana sayfaya dön
       if (router.canGoBack()) {
         router.back();
       }
     } catch (e) {
-      Alert.alert('Hata', 'Konum kaydedilemedi.');
+      Alert.alert('Hata', 'Konum kaydedilemedi veya bildirimler iptal edilemedi.');
+      console.error('handleSelectLocation error:', e);
     }
   }
 

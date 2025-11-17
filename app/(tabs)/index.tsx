@@ -113,7 +113,12 @@ function getTodayDate(): string {
   )}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function timeToDateBase(timeString: string): Date {
+// --- YENİ VE DÜZELTİLMİŞ FONKSİYON 1 ---
+/**
+ * Verilen saat string'ini (örn: "04:30" veya "24:10")
+ * DİKKATE ALARAK, temel tarihe (baseDate) uygular.
+ */
+function timeToDateBase(timeString: string, baseDate: Date): Date {
   let t = timeString;
 
   if (typeof t !== 'string') {
@@ -121,31 +126,49 @@ function timeToDateBase(timeString: string): Date {
     t = '00:00';
   }
 
+  // "24:10" gibi bir saat gelirse, bunun bir sonraki güne ait 00:10 olduğunu not al
+  let isNextDay = false;
   if (t.startsWith('24:')) {
     t = t.replace('24:', '00:');
+    isNextDay = true;
   }
 
   const [h, m] = t.split(':').map(Number);
-  const d = new Date();
+  
+  // Temel tarihi klonla, orijinalini bozma
+  const d = new Date(baseDate.getTime());
   d.setHours(h || 0, m || 0, 0, 0);
+
+  // Eğer saat "24:xx" formatındaysa, tarihi bir gün ileri al
+  if (isNextDay) {
+    d.setDate(d.getDate() + 1);
+  }
+  
   return d;
 }
 
+// --- YENİ VE DÜZELTİLMİŞ FONKSİYON 2 ---
 /**
- * Bu fonksiyon, verilen saat eğer geçmişteyse
- * otomatik olarak bir sonraki güne kaydırır (ertesi gün aynı saat).
+ * Bu fonksiyon, verilen saatin "geçmişte" kalıp kalmadığını kontrol eder.
+ * Eğer geçmişte kaldıysa (ve "24:xx" formatında değilse), 24 saat ekler.
  */
 function safeTimeToFutureDate(
   timeString: string,
   now: Date = new Date()
 ): Date {
-  const candidate = timeToDateBase(timeString);
+  // 'now' değişkenini temel tarih olarak timeToDateBase'e yolla
+  const candidate = timeToDateBase(timeString, now);
 
-  if (candidate.getTime() <= now.getTime()) {
-    // Geçmiş vakit → ertesi günün aynı saati
+  // Eğer adayın saati '24:' ile başlamıyorsa (yani normal bir vakitse, örn: "04:30")
+  // VE 'şimdi'den önceyse (yani geçmişte kalmışsa)
+  if (!timeString.startsWith('24:') && candidate.getTime() <= now.getTime()) {
+    // 24 saat ekleyerek yarına planla
     return new Date(candidate.getTime() + 24 * 60 * 60 * 1000);
   }
 
+  // Aksi takdirde, aday zaten doğrudur:
+  // 1. "17:30" (gelecekteki bir vakit)
+  // 2. "24:10" (timeToDateBase bunu zaten "yarın 00:10" yaptı)
   return candidate;
 }
 
@@ -279,7 +302,7 @@ function buildSchedulePayload(
  *
  * 1. Aynı gün ve aynı hash için tekrar planlama YAPMAZ
  * 2. Yeni güne geçildiğinde, hash değiştiğinde veya saatler değiştiğinde
- *    önce eski bildirimleri temizler → sonra yenilerini planlar
+ * önce eski bildirimleri temizler → sonra yenilerini planlar
  * 3. Geçmiş vakitleri ertesi güne kaydırır (ANINDA 4–5 bildirim patlamaz)
  */
 
@@ -323,14 +346,17 @@ async function scheduleDailyNotifications(
     return;
   }
 
-  // 5) Eski planlanmış bildirimleri temizle (önceki gün / eski konum / eski ayarlar)
+  // 5) Eski planlanmış bildirimleri temizle
+  // NOT: Bu kod, 'select-location.tsx' dosyasındaki iptal işlemine ek
+  // olarak bir güvencedir. (örn. gün değişimi, ayar değişimi için)
   await Notifications.cancelAllScheduledNotificationsAsync();
-  console.log('LOG: Önceki tüm planlanmış bildirimler temizlendi.');
+  console.log('LOG: (schedule) Önceki tüm planlanmış bildirimler temizlendi.');
 
   const now = new Date();
 
   // 6) Her vakit için planlama
   for (const p of list) {
+    // DÜZELTME: 'safeTimeToFutureDate' artık doğru çalışıyor
     const date = safeTimeToFutureDate(p.time, now);
 
     await Notifications.scheduleNotificationAsync({
@@ -403,9 +429,6 @@ export default function HomeScreen() {
   const router = useRouter();
 
   const highlightColor = useThemeColor({}, 'highlight');
-  const cardBackgroundColor = useThemeColor({}, 'card');
-  const borderColor = useThemeColor({}, 'border');
-  const mainAccentColor = useThemeColor({}, 'tint');
 
   // Aynı times ile tekrar tekrar planlamayı engellemek için
   const lastScheduledTimesJsonRef = useRef<string | null>(null);
@@ -431,6 +454,10 @@ export default function HomeScreen() {
     lastScheduledTimesJsonRef.current = json;
   }, [times]);
 
+  
+  // DÜZELTME: 'times' bağımlılığını kaldırdık.
+  // Bu fonksiyonun 'times' state'ine ihtiyacı yok,
+  // sadece 'AsyncStorage'dan okuma yapmalı.
   const checkLocationAndFetchTimes = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -456,11 +483,10 @@ export default function HomeScreen() {
         const cached: CachedPrayerData = JSON.parse(cachedDataJson);
 
         if (cached.fetchDate === TODAY_DATE && cached.locationId === location.id) {
-          if (!times) {
-            processApiData(cached.monthlyTimes, location.id);
-          } else {
-            setLoading(false);
-          }
+          // ÖNEMLİ DÜZELTME: 'times' state'ini kontrol etmeyi bıraktık.
+          // Veri taze ve doğruysa, state'i her zaman güncellemeliyiz.
+          // Bu, 'processApiData'nın sadece bir kez çağrılmasını sağlar.
+          processApiData(cached.monthlyTimes, location.id);
           return;
         }
       }
@@ -471,7 +497,7 @@ export default function HomeScreen() {
       setError('Hafıza okunurken hata oluştu.');
       setLoading(false);
     }
-  }, [router, times]);
+  }, [router]); // 'times' bağımlılığı kaldırıldı
 
   useFocusEffect(
     useCallback(() => {
@@ -526,7 +552,9 @@ export default function HomeScreen() {
       );
 
       if (!todayTimes) {
-        todayTimes = monthlyTimesArray[0];
+        // Bugünün vaktini bulamazsa, dizideki ilk günü kullan (genelde ayın 1'i)
+        // Bu, gece yarısı API'den henüz bugünün verisi gelmediyse bile uygulamanın çalışmasını sağlar
+        todayTimes = monthlyTimesArray[0]; 
       }
 
       if (todayTimes) {
@@ -549,6 +577,7 @@ export default function HomeScreen() {
     }
   }
 
+  // --- YENİ VE DÜZELTİLMİŞ GERİ SAYIM BLOĞU ---
   /**
    * --- Şu anki vakit, sonraki vakit ve geri sayım ---
    */
@@ -556,68 +585,76 @@ export default function HomeScreen() {
     if (!times) return;
 
     const intervalId = setInterval(() => {
-      const now = new Date();
+      const now = new Date(); // 'now' burada tanımlanıyor
 
+      // DÜZELTME: 'now' değişkenini timeToDateBase'e iletiyoruz
       const prayerDateTimes: Record<PrayerName, Date> = {
-        İmsak: timeToDateBase(times.imsak),
-        Güneş: timeToDateBase(times.gunes),
-        Öğle: timeToDateBase(times.ogle),
-        İkindi: timeToDateBase(times.ikindi),
-        Akşam: timeToDateBase(times.aksam),
-        Yatsı: timeToDateBase(times.yatsi),
+        İmsak: timeToDateBase(times.imsak, now),
+        Güneş: timeToDateBase(times.gunes, now),
+        Öğle: timeToDateBase(times.ogle, now),
+        İkindi: timeToDateBase(times.ikindi, now),
+        Akşam: timeToDateBase(times.aksam, now),
+        Yatsı: timeToDateBase(times.yatsi, now), // Artık '24:xx' saatleri doğru işlenecek
       };
 
-      let current: PrayerName | null = null;
-      let next: PrayerName | null = null;
+      // YENİ VE BASİT GERİ SAYIM MANTIĞI:
+      
+      // Bugünün tüm vakitlerini (Date objeleriyle) al
+      const allTimesToday = PRAYER_NAMES_ORDER.map((name) => ({
+        name,
+        time: prayerDateTimes[name],
+      }));
 
-      let minDiff = Infinity;
+      // Bir sonraki günün İmsak vaktini de hesaba kat
+      const tomorrowBase = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const nextImsak = timeToDateBase(times.imsak, tomorrowBase);
 
-      const all = [
-        ...PRAYER_NAMES_ORDER.map((name) => ({
-          name,
-          time: prayerDateTimes[name],
-          isNextDay: false,
-        })),
+      // Bugünün vakitlerini + yarının ilk vaktini birleştir
+      const allPrayerEntries = [
+        ...allTimesToday,
         {
           name: 'İmsak' as PrayerName,
-          time: new Date(
-            prayerDateTimes['İmsak'].getTime() + 24 * 60 * 60 * 1000
-          ),
-          isNextDay: true,
+          time: nextImsak,
         },
       ];
 
-      for (const { name, time, isNextDay } of all) {
-        const diff = time.getTime() - now.getTime();
+      let nextPrayerEntry: { name: PrayerName; time: Date } | null = null;
+      let minPositiveDiff = Infinity;
 
-        if (diff <= 0 && !isNextDay) {
-          current = name;
+      // 'now'dan sonraki en yakın vakti bul
+      for (const entry of allPrayerEntries) {
+        const diff = entry.time.getTime() - now.getTime();
+
+        // Sadece gelecekteki vakitlere bak
+        if (diff > 0 && diff < minPositiveDiff) {
+          minPositiveDiff = diff;
+          nextPrayerEntry = entry;
         }
-
-        if (diff > 0 && diff < minDiff) {
-          minDiff = diff;
-          next = name;
-        }
       }
 
-      if (next === null) {
-        current = 'Yatsı';
-        next = 'İmsak';
-        minDiff =
-          all[all.length - 1].time.getTime() - now.getTime();
+      // Normalde bu 'if'e girmez ama garanti olsun
+      if (!nextPrayerEntry) {
+        nextPrayerEntry = { name: 'İmsak', time: nextImsak };
+        minPositiveDiff = nextImsak.getTime() - now.getTime();
       }
 
-      if (current === null && next === 'İmsak' && minDiff > 12 * 60 * 60 * 1000) {
-        current = 'Yatsı';
-      }
+      // 'next' bulundu. 'current' ise 'next'ten bir öncekidir.
+      setNextPrayer(nextPrayerEntry.name);
+      setTimeRemaining(formatTimeRemaining(minPositiveDiff));
 
-      if (current === null) {
-        current = 'Yatsı';
-      }
+      const nextIndex = PRAYER_NAMES_ORDER.indexOf(nextPrayerEntry.name);
+      let currentIndex: number;
 
-      setCurrentPrayer(current);
-      setNextPrayer(next);
-      setTimeRemaining(formatTimeRemaining(minDiff));
+      if (nextIndex === 0) {
+        // Sonraki vakit İmsak ise, şu anki vakit Yatsı'dır
+        currentIndex = PRAYER_NAMES_ORDER.length - 1; // Yatsı
+      } else {
+        // Diğer durumlarda bir öncekidir
+        currentIndex = nextIndex - 1;
+      }
+      
+      setCurrentPrayer(PRAYER_NAMES_ORDER[currentIndex]);
+
     }, 1000);
 
     return () => clearInterval(intervalId);
