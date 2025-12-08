@@ -242,8 +242,8 @@ const styles = StyleSheet.create({
   } as TextStyle,
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 124,
+    paddingTop: 20,
+    paddingBottom: 30,
     gap: 12,
   },
   header: {

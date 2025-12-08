@@ -15,7 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
-import { DAILY_CONTENT, getRandomContent } from '@/constants/islamicContent';
+import { getRandomContent } from '@/constants/islamicContent';
 import {
   MonthlyPrayerDay,
   PrayerTimeData,
@@ -329,16 +329,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {currentPrayer && (
-          <View style={[styles.infoCard, { borderColor: '#e1c56433', backgroundColor: '#14120f' }]}>
-            <ThemedText style={[styles.cardTitle, { color: '#e1c564', marginBottom: 4 }]}>
-              {currentPrayer} Vakti
-            </ThemedText>
-            <ThemedText style={styles.cardText}>
-              {DAILY_CONTENT.prayerSpecific[currentPrayer as keyof typeof DAILY_CONTENT.prayerSpecific]}
-            </ThemedText>
-          </View>
-        )}
+      
 
         {dailyInfo && (
           <>
@@ -351,14 +342,7 @@ export default function HomeScreen() {
               <ThemedText style={styles.cardSource}>— {dailyInfo.verse.source}</ThemedText>
             </View>
 
-            <View style={[styles.infoCard, { borderColor: '#e1c56433' }]}>
-              <View style={styles.cardHeader}>
-                <ThemedText style={styles.cardIcon}>✨</ThemedText>
-                <ThemedText style={[styles.cardTitle, { color: '#e1c564' }]}>Günün Hadisi</ThemedText>
-              </View>
-              <ThemedText style={styles.cardText}>"{dailyInfo.hadith.text}"</ThemedText>
-              <ThemedText style={styles.cardSource}>— {dailyInfo.hadith.source}</ThemedText>
-            </View>
+         
           </>
         )}
 
@@ -402,8 +386,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 160,
+    paddingTop: 20,
+    paddingBottom: 30,
     gap: 16,
   },
   headerRow: {
