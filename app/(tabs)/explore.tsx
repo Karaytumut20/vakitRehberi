@@ -1,6 +1,3 @@
-// app/(tabs)/monthly.tsx
-
-import AdmobBanner from '@/components/AdmobBanner';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import {
@@ -8,14 +5,10 @@ import {
   ScrollView,
   StyleSheet,
   TextStyle,
-  View,
+  View, // SafeAreaView yerine View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-
-/** --- Tipler --- */
 
 interface PrayerDay {
   date: string;
@@ -40,8 +33,6 @@ interface LocationData {
 
 const CACHE_KEY = '@cached_prayer_data';
 const LOCATION_KEY = '@selected_location';
-
-/** --- Yardımcı --- */
 
 function getTodayDate(): string {
   const d = new Date();
@@ -69,12 +60,10 @@ export default function MonthlyScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // GOLD THEME RENKLER
   const gold = '#e1c564';
   const goldDark = '#e1af64ff';
-
-  const cardBackgroundColor = '#0b0b0a'; // premium koyu
-  const borderGoldSoft = '#e1c56433';   // yumuşak altın border
+  const cardBackgroundColor = '#0b0b0a';
+  const borderGoldSoft = '#e1c56433';
 
   useEffect(() => {
     async function loadMonthly() {
@@ -93,7 +82,6 @@ export default function MonthlyScreen() {
         setLocation(loc);
 
         const cachedJson = await AsyncStorage.getItem(CACHE_KEY);
-
         if (cachedJson) {
           const cached: CachedPrayerData = JSON.parse(cachedJson);
           if (cached.locationId === loc.id && Array.isArray(cached.monthlyTimes)) {
@@ -120,7 +108,6 @@ export default function MonthlyScreen() {
           fetchDate: today,
           monthlyTimes: monthly,
         };
-
         await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(cache));
       } catch (e: any) {
         console.warn('Monthly load error:', e);
@@ -137,151 +124,114 @@ export default function MonthlyScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1 }}>
-        <ThemedView style={styles.centered}>
-          <ActivityIndicator size="large" color={gold} />
-          <ThemedText style={[styles.loadingText, { color: gold }]}>
-            Aylık takvim yükleniyor...
-          </ThemedText>
-        </ThemedView>
-      </SafeAreaView>
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color={gold} />
+        <ThemedText style={[styles.loadingText, { color: gold }]}>
+          Aylık takvim yükleniyor...
+        </ThemedText>
+      </View>
     );
   }
 
+  // DÜZELTME: SafeAreaView yerine View
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#090906' }}>
-      <ThemedView style={[styles.container, { backgroundColor: '#090906' }]}>
-        {/* ÜST ADMOB */}
-        <View style={styles.bannerTopWrapper}>
-          <View style={styles.bannerInner}>
-            <AdmobBanner />
-          </View>
-        </View>
+    <View style={styles.container}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Başlık */}
+        <View style={styles.header}>
+          <ThemedText style={[styles.title, { color: gold }]}>
+            Aylık Takvim
+          </ThemedText>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {/* Başlık */}
-          <View style={styles.header}>
-            <ThemedText style={[styles.title, { color: gold }]}>
-              Aylık Takvim
+          {location && (
+            <ThemedText style={[styles.location, { color: goldDark }]}>
+              {location.name}
             </ThemedText>
-
-            {location && (
-              <ThemedText style={[styles.location, { color: goldDark }]}>
-                {location.name}
-              </ThemedText>
-            )}
-
-            <ThemedText style={[styles.subtitle, { color: goldDark }]}>
-              Bu ayın tüm namaz vakitlerini aşağıdaki listeden
-              inceleyebilirsiniz.
-            </ThemedText>
-          </View>
-
-          {/* Hata Mesajı */}
-          {error && (
-            <View
-              style={[
-                styles.errorBox,
-                { borderColor: '#b00020', backgroundColor: '#330000' },
-              ]}
-            >
-              <ThemedText style={styles.errorText}>{error}</ThemedText>
-            </View>
           )}
 
-          {/* Aylık Liste */}
-          {monthlyTimes && (
-            <View style={styles.monthList}>
-              {monthlyTimes.map((day) => {
-                const isToday = day.date.startsWith(todayStr);
+          <ThemedText style={[styles.subtitle, { color: goldDark }]}>
+            Bu ayın tüm namaz vakitlerini aşağıdaki listeden
+            inceleyebilirsiniz.
+          </ThemedText>
+        </View>
 
-                return (
-                  <View
-                    key={day.date}
-                    style={[
-                      styles.dayCard,
-                      {
-                        backgroundColor: cardBackgroundColor,
-                        borderColor: isToday ? gold : borderGoldSoft,
-                      },
-                      isToday && {
-                        shadowColor: gold,
-                        shadowOpacity: 0.3,
-                        shadowRadius: 8,
-                      },
-                    ]}
-                  >
-                    {/* Tarih */}
-                    <View style={styles.dayHeader}>
-                      <ThemedText
-                        style={[
-                          styles.dayDate,
-                          { color: isToday ? gold : goldDark },
-                        ]}
-                      >
-                        {formatDateTR(day.date)}
+        {/* Hata Mesajı */}
+        {error && (
+          <View style={[styles.errorBox, { borderColor: '#b00020', backgroundColor: '#330000' }]}>
+            <ThemedText style={styles.errorText}>{error}</ThemedText>
+          </View>
+        )}
+
+        {/* Aylık Liste */}
+        {monthlyTimes && (
+          <View style={styles.monthList}>
+            {monthlyTimes.map((day) => {
+              const isToday = day.date.startsWith(todayStr);
+              return (
+                <View
+                  key={day.date}
+                  style={[
+                    styles.dayCard,
+                    {
+                      backgroundColor: cardBackgroundColor,
+                      borderColor: isToday ? gold : borderGoldSoft,
+                    },
+                    isToday && {
+                      shadowColor: gold,
+                      shadowOpacity: 0.3,
+                      shadowRadius: 8,
+                    },
+                  ]}
+                >
+                  <View style={styles.dayHeader}>
+                    <ThemedText style={[styles.dayDate, { color: isToday ? gold : goldDark }]}>
+                      {formatDateTR(day.date)}
+                    </ThemedText>
+                    {isToday && (
+                      <ThemedText style={[styles.todayBadge, { borderColor: gold, color: gold }]}>
+                        Bugün
                       </ThemedText>
-
-                      {isToday && (
-                        <ThemedText
-                          style={[
-                            styles.todayBadge,
-                            { borderColor: gold, color: gold },
-                          ]}
-                        >
-                          Bugün
-                        </ThemedText>
-                      )}
-                    </View>
-
-                    {/* Saatler */}
-                    <View style={styles.timesGrid}>
-                      {[
-                        ['İmsak', day.fajr],
-                        ['Güneş', day.sun],
-                        ['Öğle', day.dhuhr],
-                        ['İkindi', day.asr],
-                        ['Akşam', day.maghrib],
-                        ['Yatsı', day.isha],
-                      ].map(([label, value]) => (
-                        <View key={label} style={styles.timeCol}>
-                          <ThemedText style={[styles.timeLabel, { color: goldDark }]}>
-                            {label}
-                          </ThemedText>
-                          <ThemedText style={[styles.timeValue, { color: gold }]}>
-                            {value || '--:--'}
-                          </ThemedText>
-                        </View>
-                      ))}
-                    </View>
+                    )}
                   </View>
-                );
-              })}
-            </View>
-          )}
-        </ScrollView>
 
-        {/* ALT ADMOB */}
-        <View style={styles.bannerBottomWrapper}>
-          <View style={styles.bannerInner}></View>
-        </View>
-      </ThemedView>
-    </SafeAreaView>
+                  <View style={styles.timesGrid}>
+                    {[
+                      ['İmsak', day.fajr],
+                      ['Güneş', day.sun],
+                      ['Öğle', day.dhuhr],
+                      ['İkindi', day.asr],
+                      ['Akşam', day.maghrib],
+                      ['Yatsı', day.isha],
+                    ].map(([label, value]) => (
+                      <View key={label} style={styles.timeCol}>
+                        <ThemedText style={[styles.timeLabel, { color: goldDark }]}>
+                          {label}
+                        </ThemedText>
+                        <ThemedText style={[styles.timeValue, { color: gold }]}>
+                          {value || '--:--'}
+                        </ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </ScrollView>
+    </View>
   );
 }
-
-/** --- Stil --- */
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'space-between',
+    backgroundColor: '#090906',
   },
   centered: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
@@ -290,25 +240,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   } as TextStyle,
-  bannerTopWrapper: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  bannerBottomWrapper: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 8,
-  },
-  bannerInner: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 12,
     paddingBottom: 124,
     gap: 12,
   },

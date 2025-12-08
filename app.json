@@ -2,7 +2,7 @@
   "expo": {
     "name": "VakitRehberi",
     "slug": "VakitRehberi",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "vakitrehberi",
@@ -20,6 +20,7 @@
     },
 
     "android": {
+      "versionCode": 2,
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.VakitRehberi",

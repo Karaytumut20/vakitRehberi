@@ -2,28 +2,31 @@
 
 import { Tabs } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // 1. Eklendi
 
-import AdmobBanner from '@/components/AdmobBanner';
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { MaterialIcons } from '@expo/vector-icons';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme() ?? 'dark';
-  const theme = Colors[colorScheme];
+  
+  // 2. Cihazın güvenli alanlarını alıyoruz (özellikle alt kısım için)
+  const insets = useSafeAreaInsets(); 
 
   // Dark + Gold palet
   const tabBarBackground = '#0b0b0a';
-  const tabBarBorderColor = '#e1c56433';
   const activeTintColor = '#e1c564';
   const inactiveTintColor = '#7f7f7f';
   const screenBackground = '#090906';
 
+  // 3. Tab Bar Yüksekliğini Dinamik Hesapla
+  // Standart yükseklik (60) + Cihazın alt güvenli alanı (insets.bottom)
+  const tabBarHeight = 60 + insets.bottom;
+
   return (
     <View style={[styles.root, { backgroundColor: screenBackground }]}>
-      {/* TABBAR + SAYFALAR */}
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -31,22 +34,16 @@ export default function TabLayout() {
           tabBarInactiveTintColor: inactiveTintColor,
           tabBarButton: HapticTab,
           tabBarStyle: {
-            borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: tabBarBorderColor,
-            height: 56,
-            paddingBottom: 4,
-            paddingTop: 4,
             backgroundColor: tabBarBackground,
-
-            // Tab bar'ı biraz yukarı alıyoruz ki altına AdMob sığsın
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 55, // 🔹 AdMob yüksekliği kadar boşluk
+            borderTopWidth: StyleSheet.hairlineWidth,
+            
+            // 4. Kritik Düzeltmeler:
+            height: tabBarHeight, // Toplam yükseklik artık dinamik
+            paddingBottom: insets.bottom > 0 ? insets.bottom : 10, // Alt boşluk güvenli alan kadar, yoksa 10px
+            paddingTop: 10, // Üstten biraz boşluk ferahlık katar
           },
         }}
       >
-        {/* ANASAYFA */}
         <Tabs.Screen
           name="index"
           options={{
@@ -56,8 +53,6 @@ export default function TabLayout() {
             ),
           }}
         />
-
-        {/* AYLIK TAKVİM */}
         <Tabs.Screen
           name="explore"
           options={{
@@ -67,8 +62,6 @@ export default function TabLayout() {
             ),
           }}
         />
-
-        {/* KIBLE */}
         <Tabs.Screen
           name="qibla"
           options={{
@@ -78,8 +71,6 @@ export default function TabLayout() {
             ),
           }}
         />
-
-        {/* AYARLAR */}
         <Tabs.Screen
           name="settings"
           options={{
@@ -90,19 +81,6 @@ export default function TabLayout() {
           }}
         />
       </Tabs>
-
-      {/* EN ALTA SABİT ADMOB BANNER */}
-      <View
-        style={[
-          styles.adContainer,
-          {
-            backgroundColor: screenBackground,
-            borderTopColor: tabBarBorderColor,
-          },
-        ]}
-      >
-        <AdmobBanner />
-      </View>
     </View>
   );
 }
@@ -110,12 +88,5 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-  },
-  adContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 100,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
 });

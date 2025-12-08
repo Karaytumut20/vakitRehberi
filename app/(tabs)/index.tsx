@@ -1,6 +1,6 @@
-// app/(tabs)/index.tsx
-
-import AdmobBanner from '@/components/AdmobBanner';
+import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ScrollView,
@@ -8,31 +8,21 @@ import {
   StyleSheet,
   TextStyle,
   TouchableOpacity,
-  View,
+  View, // SafeAreaView yerine View kullanıyoruz
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect, useRouter } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
-// -------------------------------------------
-// 🔔 GÜNCELLENMİŞ NOTIFICATION SİSTEMİ
-// -------------------------------------------
+import { DAILY_CONTENT, getRandomContent } from '@/constants/islamicContent';
 import {
-  MonthlyPrayerDay, // YENİ TİP (lib/notifications.ts'ten)
+  MonthlyPrayerDay,
   PrayerTimeData,
-  schedulePrayerNotificationsFor15Days, // YENİ FONKSİYON
+  schedulePrayerNotificationsFor15Days,
 } from '@/lib/notifications';
 
-// --------------------------------------------------
-// TYPES
-// --------------------------------------------------
-
+// --- TYPES ---
 interface LocationData {
   id: string;
   name: string;
@@ -41,7 +31,7 @@ interface LocationData {
 interface CachedPrayerData {
   locationId: string;
   fetchDate: string;
-  monthlyTimes: MonthlyPrayerDay[]; // Tipi MonthlyPrayerDay[] olarak güncelledik
+  monthlyTimes: MonthlyPrayerDay[];
 }
 
 type PrayerName = 'İmsak' | 'Güneş' | 'Öğle' | 'İkindi' | 'Akşam' | 'Yatsı';
@@ -55,7 +45,7 @@ const PRAYER_NAMES_ORDER: PrayerName[] = [
   'Yatsı',
 ];
 
-// Tarih formatlayıcı
+// --- HELPER FUNCTIONS ---
 function getTodayDate(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
@@ -64,13 +54,9 @@ function getTodayDate(): string {
   )}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// Bir saati, verilen tarihe göre Date objesi yapma
 function timeToDateBase(timeString: string, baseDate: Date): Date {
   let t = timeString;
-
-  if (typeof t !== 'string') {
-    t = '00:00';
-  }
+  if (typeof t !== 'string') t = '00:00';
 
   let isNextDay = false;
   if (t.startsWith('24:')) {
@@ -83,34 +69,23 @@ function timeToDateBase(timeString: string, baseDate: Date): Date {
   d.setHours(h || 0, m || 0, 0, 0);
 
   if (isNextDay) d.setDate(d.getDate() + 1);
-
   return d;
 }
 
 function formatTimeRemaining(ms: number): string {
   if (ms < 0) return '00:00:00';
-
   const totalSeconds = Math.floor(ms / 1000);
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
-
   return [h, m, s].map((v) => String(v).padStart(2, '0')).join(':');
 }
 
-// --------------------------------------------------
-// MAIN SCREEN
-// --------------------------------------------------
-
+// --- MAIN COMPONENT ---
 export default function HomeScreen() {
-  // Sadece bugünün vakitlerini (UI için) tutar
   const [times, setTimes] = useState<PrayerTimeData | null>(null);
-  // 15 günlük bildirim için TÜM aylık veriyi tutar
-  const [monthlyTimes, setMonthlyTimes] = useState<MonthlyPrayerDay[] | null>(
-    null
-  );
-  const [selectedLocation, setSelectedLocation] =
-    useState<LocationData | null>(null);
+  const [monthlyTimes, setMonthlyTimes] = useState<MonthlyPrayerDay[] | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -118,44 +93,33 @@ export default function HomeScreen() {
   const [nextPrayer, setNextPrayer] = useState<PrayerName | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<string>('—:—:—');
 
+  const [dailyInfo, setDailyInfo] = useState<{
+    verse: { text: string; source: string };
+    hadith: { text: string; source: string };
+  } | null>(null);
+
   const theme = useColorScheme() ?? 'light';
   const router = useRouter();
   const highlightColor = useThemeColor({}, 'highlight');
 
-  // --- ISTEK UZERINE KALDIRILDI ---
-  // const lastScheduledTimesJsonRef = useRef<string | null>(null);
-
-  // ----------------------------------------------------------------------
-  // 🔔 Namaz vakitleri yüklendiğinde bildirimleri PLANLA (GÜNCELLENDİ)
-  // ----------------------------------------------------------------------
   useEffect(() => {
-    // Artık 'times' (bugün) değil, 'monthlyTimes' (tüm ay) verisini bekliyoruz
+    setDailyInfo(getRandomContent());
+  }, []);
+
+  useEffect(() => {
     if (!monthlyTimes || !selectedLocation) return;
-
-    // --- ISTEK UZERINE KONTROL KALDIRILDI ---
-    // Artık 'useFocusEffect' her tetiklendiğinde
-    // bildirimler yeniden planlanacak.
-    // --- KONTROL SONU ---
-
-    // 'schedulePrayerNotificationsForToday' yerine YENİ fonksiyonu çağırıyoruz
     schedulePrayerNotificationsFor15Days(monthlyTimes, selectedLocation.id).catch(
       (e) => console.warn('15-day schedule error:', e)
     );
-  }, [monthlyTimes, selectedLocation]); // <-- Bağımlılık 'monthlyTimes'a değiştirdik
-
-  // ----------------------------------------------------------------------
-  // Konumu & vakitleri yükleme
-  // ----------------------------------------------------------------------
+  }, [monthlyTimes, selectedLocation]);
 
   const checkLocationAndFetchTimes = useCallback(async () => {
     setLoading(true);
     setError(null);
-
     const TODAY_DATE = getTodayDate();
 
     try {
       const locationJson = await AsyncStorage.getItem('@selected_location');
-
       if (!locationJson) {
         setError('Lütfen bir konum seçin.');
         setLoading(false);
@@ -167,21 +131,14 @@ export default function HomeScreen() {
       setSelectedLocation(location);
 
       const cachedDataJson = await AsyncStorage.getItem('@cached_prayer_data');
-
       if (cachedDataJson) {
         const cached: CachedPrayerData = JSON.parse(cachedDataJson);
-
-        if (
-          cached.fetchDate === TODAY_DATE &&
-          cached.locationId === location.id
-        ) {
-          console.log('LOG: Vakitler (UI) için KEŞ kullanılıyor.');
+        if (cached.fetchDate === TODAY_DATE && cached.locationId === location.id) {
           processApiData(cached.monthlyTimes);
           return;
         }
       }
 
-      console.log('LOG: Vakitler için API\'den taze veri çekiliyor.');
       await fetchPrayerTimes(location.id, TODAY_DATE);
     } catch (e) {
       console.warn('checkLocation error:', e);
@@ -192,23 +149,16 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      console.log('LOG: Anasayfaya odaklanıldı, vakitler kontrol ediliyor...');
       checkLocationAndFetchTimes();
     }, [checkLocationAndFetchTimes])
   );
 
-  async function fetchPrayerTimes(
-    locationId: string,
-    todayDate: string
-  ): Promise<void> {
+  async function fetchPrayerTimes(locationId: string, todayDate: string): Promise<void> {
     try {
       const res = await fetch(
         `https://prayertimes.api.abdus.dev/api/diyanet/prayertimes?location_id=${locationId}`
       );
-
-      if (!res.ok) {
-        throw new Error(`Vakitler alınamadı (HTTP ${res.status}).`);
-      }
+      if (!res.ok) throw new Error(`Vakitler alınamadı (HTTP ${res.status}).`);
 
       const monthly: MonthlyPrayerDay[] = await res.json();
       processApiData(monthly);
@@ -218,35 +168,25 @@ export default function HomeScreen() {
         fetchDate: todayDate,
         monthlyTimes: monthly,
       };
-
       await AsyncStorage.setItem('@cached_prayer_data', JSON.stringify(cache));
     } catch (e: any) {
-      console.warn('fetchPrayerTimes error:', e);
       setError(e?.message ?? 'Vakitler çekilirken hata oluştu.');
       setLoading(false);
     }
   }
 
-  // processApiData GÜNCELLENDİ
   function processApiData(monthlyTimesArray: MonthlyPrayerDay[]) {
     try {
       if (!Array.isArray(monthlyTimesArray) || monthlyTimesArray.length === 0) {
         throw new Error('API yanıtı geçersiz.');
       }
-
       const TODAY_DATE = getTodayDate();
-
       let todayTimes = monthlyTimesArray.find(
-        (d: any) =>
-          typeof d.date === 'string' && d.date.startsWith(TODAY_DATE)
+        (d: any) => typeof d.date === 'string' && d.date.startsWith(TODAY_DATE)
       );
-
-      // Eğer bugünün tarihini bulamazsa (gece 12'yi geçmiş olabilir),
-      // listedeki ilk günü al (genelde o gün olur)
       if (!todayTimes) todayTimes = monthlyTimesArray[0];
 
       if (todayTimes) {
-        // 1. Bugünü UI için state'e at
         setTimes({
           imsak: todayTimes.fajr,
           gunes: todayTimes.sun,
@@ -255,30 +195,21 @@ export default function HomeScreen() {
           aksam: todayTimes.maghrib,
           yatsi: todayTimes.isha,
         });
-
-        // 2. TÜM VERİYİ bildirim sistemi için state'e at
-        // Bu, yukarıdaki 'useEffect'i tetikleyecek.
         setMonthlyTimes(monthlyTimesArray);
       } else {
         setError('Veri bulundu ancak işlenemedi.');
       }
     } catch (e: any) {
-      console.warn('processApiData error:', e);
       setError(e?.message ?? 'Veri işlenirken hata oluştu.');
     } finally {
       setLoading(false);
     }
   }
 
-  // ----------------------------------------------------------------------
-  // ⏱ Kalan süre & Mevcut vakit hesaplama (dokunulmadı)
-  // ----------------------------------------------------------------------
   useEffect(() => {
     if (!times) return;
-
     const intervalId = setInterval(() => {
       const now = new Date();
-
       const prayerDateTimes: Record<PrayerName, Date> = {
         İmsak: timeToDateBase(times.imsak, now),
         Güneş: timeToDateBase(times.gunes, now),
@@ -295,7 +226,6 @@ export default function HomeScreen() {
 
       const tomorrowBase = new Date(now.getTime() + 24 * 60 * 60 * 1000);
       const nextImsak = timeToDateBase(times.imsak, tomorrowBase);
-
       const allPrayerEntries = [
         ...allTimesToday,
         { name: 'İmsak' as PrayerName, time: nextImsak },
@@ -323,171 +253,156 @@ export default function HomeScreen() {
       const nextIndex = PRAYER_NAMES_ORDER.indexOf(nextPrayerEntry.name);
       const currentIndex =
         nextIndex === 0 ? PRAYER_NAMES_ORDER.length - 1 : nextIndex - 1;
-
       setCurrentPrayer(PRAYER_NAMES_ORDER[currentIndex]);
     }, 1000);
 
     return () => clearInterval(intervalId);
   }, [times]);
 
-  // ---------------------------------------------------------
-  // UI (dokunulmadı)
-  // ---------------------------------------------------------
-
+  // DÜZELTME: SafeAreaView yerine View kullanıldı
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <StatusBar
-        barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
-      />
-      <ThemedView style={styles.container}>
-        {/* ÜST ADMOB */}
-        <View style={styles.bannerTopWrapper}>
-          <View style={styles.bannerInner}>
-            <AdmobBanner />
+    <View style={styles.container}>
+      <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />
+      
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.headerRow}>
+          <View>
+            <ThemedText style={styles.appTitle}>Vakit Rehberi</ThemedText>
+            {selectedLocation && (
+              <ThemedText style={styles.locationText}>
+                {selectedLocation.name}
+              </ThemedText>
+            )}
           </View>
+
+          <TouchableOpacity
+            style={[styles.locationButton, { borderColor: '#e1c564' }]}
+            onPress={() => router.push('/select-location')}
+          >
+            <ThemedText style={[styles.locationButtonText, { color: '#e1c564' }]}>
+              Konum Değiştir
+            </ThemedText>
+          </TouchableOpacity>
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
+        <TouchableOpacity 
+          style={[styles.quranButton, { borderColor: '#e1c56433', backgroundColor: '#14120f' }]}
+          onPress={() => router.push('/quran')}
         >
-          {/* HEADER */}
-          <View style={styles.headerRow}>
-            <View>
-              <ThemedText style={styles.appTitle}>Vakit Rehberi</ThemedText>
-              {selectedLocation && (
-                <ThemedText style={styles.locationText}>
-                  {selectedLocation.name}
-                </ThemedText>
-              )}
-            </View>
+          <ThemedText style={{fontSize: 24}}>📖</ThemedText>
+          <View style={{flex: 1, marginLeft: 12}}>
+            <ThemedText style={[styles.premiumLabel, {color: '#e1c564'}]}>Kur'an-ı Kerim</ThemedText>
+            <ThemedText style={{color: '#888', fontSize: 12}}>Sureleri oku</ThemedText>
+          </View>
+          <MaterialIcons name="chevron-right" size={24} color="#e1c564" />
+        </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.locationButton, { borderColor: '#e1c564' }]}
-              onPress={() => router.push('/select-location')}
-            >
-              <ThemedText
-                style={[styles.locationButtonText, { color: '#e1c564' }]}
-              >
-                Konum Değiştir
-              </ThemedText>
+        {error && (
+          <View style={styles.errorBox}>
+            <ThemedText style={styles.errorText}>{error}</ThemedText>
+            <TouchableOpacity style={styles.retryButton} onPress={checkLocationAndFetchTimes}>
+              <ThemedText style={styles.retryButtonText}>Tekrar dene</ThemedText>
             </TouchableOpacity>
           </View>
+        )}
 
-          {/* ERROR */}
-          {error && (
-            <View style={styles.errorBox}>
-              <ThemedText style={styles.errorText}>{error}</ThemedText>
-              <TouchableOpacity
-                style={styles.retryButton}
-                onPress={checkLocationAndFetchTimes}
-              >
-                <ThemedText style={styles.retryButtonText}>
-                  Tekrar dene
-                </ThemedText>
-              </TouchableOpacity>
-            </View>
-          )}
+        {times && (
+          <View style={[styles.currentCard, { backgroundColor: '#090906', borderColor: '#e1af64ff' }]}>
+            <ThemedText style={styles.currentLabel}>Şu anki vakit</ThemedText>
+            <ThemedText style={[styles.currentName, { color: highlightColor }]}>
+              {currentPrayer ?? '—'}
+            </ThemedText>
 
-          {/* ŞU ANKİ VAKİT */}
-          {times && (
-            <View
-              style={[
-                styles.currentCard,
-                {
-                  backgroundColor: '#090906',
-                  borderColor: '#e1af64ff',
-                },
-              ]}
-            >
-              <ThemedText style={styles.currentLabel}>
-                Şu anki vakit
-              </ThemedText>
-              <ThemedText
-                style={[styles.currentName, { color: highlightColor }]}
-              >
-                {currentPrayer ?? '—'}
-              </ThemedText>
-
-              <View style={styles.nextRow}>
-                <View>
-                  <ThemedText style={styles.nextLabel}>
-                    Sonraki vakit
-                  </ThemedText>
-                  <ThemedText style={styles.nextName}>
-                    {nextPrayer ?? '—'}
-                  </ThemedText>
-                </View>
-                <View style={styles.countdownBox}>
-                  <ThemedText style={styles.countdownLabel}>
-                    Kalan süre
-                  </ThemedText>
-                  <ThemedText style={styles.countdownValue}>
-                    {timeRemaining}
-                  </ThemedText>
-                </View>
+            <View style={styles.nextRow}>
+              <View>
+                <ThemedText style={styles.nextLabel}>Sonraki vakit</ThemedText>
+                <ThemedText style={styles.nextName}>{nextPrayer ?? '—'}</ThemedText>
+              </View>
+              <View style={styles.countdownBox}>
+                <ThemedText style={styles.countdownLabel}>Kalan süre</ThemedText>
+                <ThemedText style={styles.countdownValue}>{timeRemaining}</ThemedText>
               </View>
             </View>
-          )}
+          </View>
+        )}
 
-          {/* PREMIUM GOLD TABLO */}
-          {times && (
-            <View style={styles.premiumTable}>
-              {[
-                { label: 'İmsak', value: times.imsak },
-                { label: 'Güneş', value: times.gunes },
-                { label: 'Öğle', value: times.ogle },
-                { label: 'İkindi', value: times.ikindi },
-                { label: 'Akşam', value: times.aksam },
-                { label: 'Yatsı', value: times.yatsi },
-              ].map((item, index, arr) => {
-                const isLast = index === arr.length - 1;
-                const isCurrent = item.label === currentPrayer;
+        {currentPrayer && (
+          <View style={[styles.infoCard, { borderColor: '#e1c56433', backgroundColor: '#14120f' }]}>
+            <ThemedText style={[styles.cardTitle, { color: '#e1c564', marginBottom: 4 }]}>
+              {currentPrayer} Vakti
+            </ThemedText>
+            <ThemedText style={styles.cardText}>
+              {DAILY_CONTENT.prayerSpecific[currentPrayer as keyof typeof DAILY_CONTENT.prayerSpecific]}
+            </ThemedText>
+          </View>
+        )}
 
-                return (
-                  <View
-                    key={item.label}
-                    style={[
-                      styles.premiumRow,
-                      isLast && styles.premiumRowLast,
-                      isCurrent && styles.premiumRowActive,
-                    ]}
-                  >
-                    <ThemedText style={styles.premiumLabel}>
-                      {item.label}
-                    </ThemedText>
-                    <ThemedText style={styles.premiumTime}>
-                      {item.value || '--:--'}
-                    </ThemedText>
-                  </View>
-                );
-              })}
+        {dailyInfo && (
+          <>
+            <View style={[styles.infoCard, { borderColor: '#e1c56433' }]}>
+              <View style={styles.cardHeader}>
+                <ThemedText style={styles.cardIcon}>📖</ThemedText>
+                <ThemedText style={[styles.cardTitle, { color: '#e1c564' }]}>Günün Ayeti</ThemedText>
+              </View>
+              <ThemedText style={styles.cardText}>"{dailyInfo.verse.text}"</ThemedText>
+              <ThemedText style={styles.cardSource}>— {dailyInfo.verse.source}</ThemedText>
             </View>
-          )}
-        </ScrollView>
 
-        {/* ALT ADMOB */}
-        <View style={styles.bannerBottomWrapper}>
-          <View style={styles.bannerInner} />
-        </View>
-      </ThemedView>
-    </SafeAreaView>
+            <View style={[styles.infoCard, { borderColor: '#e1c56433' }]}>
+              <View style={styles.cardHeader}>
+                <ThemedText style={styles.cardIcon}>✨</ThemedText>
+                <ThemedText style={[styles.cardTitle, { color: '#e1c564' }]}>Günün Hadisi</ThemedText>
+              </View>
+              <ThemedText style={styles.cardText}>"{dailyInfo.hadith.text}"</ThemedText>
+              <ThemedText style={styles.cardSource}>— {dailyInfo.hadith.source}</ThemedText>
+            </View>
+          </>
+        )}
+
+        {times && (
+          <View style={styles.premiumTable}>
+            {[
+              { label: 'İmsak', value: times.imsak },
+              { label: 'Güneş', value: times.gunes },
+              { label: 'Öğle', value: times.ogle },
+              { label: 'İkindi', value: times.ikindi },
+              { label: 'Akşam', value: times.aksam },
+              { label: 'Yatsı', value: times.yatsi },
+            ].map((item, index, arr) => {
+              const isLast = index === arr.length - 1;
+              const isCurrent = item.label === currentPrayer;
+              return (
+                <View
+                  key={item.label}
+                  style={[
+                    styles.premiumRow,
+                    isLast && styles.premiumRowLast,
+                    isCurrent && styles.premiumRowActive,
+                  ]}
+                >
+                  <ThemedText style={styles.premiumLabel}>{item.label}</ThemedText>
+                  <ThemedText style={styles.premiumTime}>{item.value || '--:--'}</ThemedText>
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </ScrollView>
+    </View>
   );
 }
-
-// ---------------------------------------------------------
-// STYLES (dokunulmadı)
-// ---------------------------------------------------------
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'space-between',
     backgroundColor: '#090906',
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 3,
+    paddingTop: 12,
     paddingBottom: 160,
     gap: 16,
   },
@@ -495,7 +410,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 4,
+    marginBottom: 4,
   },
   appTitle: {
     fontSize: 24,
@@ -518,6 +433,47 @@ const styles = StyleSheet.create({
   locationButtonText: {
     fontSize: 13,
     fontWeight: '500',
+  } as TextStyle,
+  quranButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  infoCard: {
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    backgroundColor: '#0b0b0a',
+    gap: 6,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  cardIcon: {
+    fontSize: 18,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  } as TextStyle,
+  cardText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#e5e5e5',
+    fontStyle: 'italic',
+  } as TextStyle,
+  cardSource: {
+    fontSize: 12,
+    color: '#e1c564',
+    textAlign: 'right',
+    marginTop: 4,
+    fontWeight: '600',
   } as TextStyle,
   errorBox: {
     padding: 12,
@@ -628,20 +584,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
   } as TextStyle,
-  bannerTopWrapper: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  bannerBottomWrapper: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 8,
-  },
-  bannerInner: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 });
