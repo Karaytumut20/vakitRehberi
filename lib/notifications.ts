@@ -26,6 +26,7 @@ export interface MonthlyPrayerDay {
   asr: string;
   maghrib: string;
   isha: string;
+  hijriDate?: string;
 }
 
 // Meta key
@@ -96,7 +97,7 @@ export async function setupNotificationChannelAndroid() {
   await Notifications.setNotificationChannelAsync('default', {
     name: 'İbadet Vakitleri',
     importance: Notifications.AndroidImportance.HIGH,
-    sound: undefined,
+    sound: 'default',
     enableVibrate: true,
     vibrationPattern: [0, 250, 250, 250],
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
@@ -167,7 +168,7 @@ export async function schedulePrayerNotificationsFor15Days(
     const now = new Date();
 
     // 15 gün
-    const days = monthlyTimes.slice(0, 15);
+    const days = monthlyTimes.slice(0, 12);
 
     const entries: Array<{ key: keyof PrayerTimeData; label: string }> = [
       { key: 'imsak', label: 'İmsak' },
@@ -202,7 +203,7 @@ export async function schedulePrayerNotificationsFor15Days(
           content: {
             title: `${entry.label} vakti geldi`,
             body: `${entry.label} vakti girdi. (${times[key]})`,
-            sound: undefined,
+            sound: 'default',
             data: {
               prayerKey: key,
               time: times[key],

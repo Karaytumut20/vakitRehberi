@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const BG_COLOR = '#090906';
 const CARD_BG = '#14120f';
@@ -24,6 +25,7 @@ interface ArabicAyah {
 export default function QuranDetailScreen() {
   const { id, name } = useLocalSearchParams();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   
   const [loading, setLoading] = useState(true);
   const [ayahs, setAyahs] = useState<Ayah[]>([]);
@@ -62,7 +64,7 @@ export default function QuranDetailScreen() {
 
   // DÜZELTME: SafeAreaView yerine View
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <MaterialIcons name="arrow-back" size={28} color={GOLD} />
@@ -142,6 +144,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     color: GOLD,
     fontFamily: 'System', 
+    textAlign: 'center',
   },
   ayahCard: {
     backgroundColor: CARD_BG,

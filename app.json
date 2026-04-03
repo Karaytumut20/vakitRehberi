@@ -2,46 +2,41 @@
   "expo": {
     "name": "VakitRehberi",
     "slug": "VakitRehberi",
-    "version": "1.0.2",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "vakitrehberi",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
-
     "ios": {
       "supportsTablet": true
     },
-
     "android": {
-      "versionCode": 2,
+      "versionCode": 11,
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.VakitRehberi",
-      "permissions": [
-        "POST_NOTIFICATIONS",
-        "SCHEDULE_EXACT_ALARM"
-      ]
+      "permissions": ["POST_NOTIFICATIONS", "SCHEDULE_EXACT_ALARM"]
     },
-
     "plugins": [
-      "expo-asset"
+      "expo-asset",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-4816381866965413~2973328480",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
+      ]
     ],
-
     "extra": {
       "eas": {
         "projectId": "0a75cac2-3629-4aec-9452-85e142537280"
       }
     }
-  },
-
-  "react-native-google-mobile-ads": {
-    "android_app_id": "ca-app-pub-4816381866965413~2973328480"
   }
 }

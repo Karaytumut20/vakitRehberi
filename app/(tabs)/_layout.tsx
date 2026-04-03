@@ -1,28 +1,22 @@
-// app/(tabs)/_layout.tsx
-
 import { Tabs } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context'; // 1. Eklendi
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme() ?? 'dark';
   
-  // 2. Cihazın güvenli alanlarını alıyoruz (özellikle alt kısım için)
   const insets = useSafeAreaInsets(); 
 
-  // Dark + Gold palet
   const tabBarBackground = '#0b0b0a';
   const activeTintColor = '#e1c564';
   const inactiveTintColor = '#7f7f7f';
   const screenBackground = '#090906';
 
-  // 3. Tab Bar Yüksekliğini Dinamik Hesapla
-  // Standart yükseklik (60) + Cihazın alt güvenli alanı (insets.bottom)
   const tabBarHeight = 60 + insets.bottom;
 
   return (
@@ -36,11 +30,9 @@ export default function TabLayout() {
           tabBarStyle: {
             backgroundColor: tabBarBackground,
             borderTopWidth: StyleSheet.hairlineWidth,
-            
-            // 4. Kritik Düzeltmeler:
-            height: tabBarHeight, // Toplam yükseklik artık dinamik
-            paddingBottom: insets.bottom > 0 ? insets.bottom : 10, // Alt boşluk güvenli alan kadar, yoksa 10px
-            paddingTop: 10, // Üstten biraz boşluk ferahlık katar
+            height: tabBarHeight,
+            paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
+            paddingTop: 10,
           },
         }}
       >
@@ -54,20 +46,20 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="explore"
+          name="quran"
           options={{
-            title: 'Aylık Takvim',
+            title: 'Kur\'an',
             tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="date-range" size={size} color={color} />
+              <MaterialCommunityIcons name="book-open-page-variant" size={size} color={color} />
             ),
           }}
         />
         <Tabs.Screen
-          name="qibla"
+          name="explore"
           options={{
-            title: 'Kıble',
+            title: 'Keşfet',
             tabBarIcon: ({ color, size }) => (
-              <IconSymbol name="safari.fill" color={color} size={size} />
+              <MaterialIcons name="explore" size={size} color={color} />
             ),
           }}
         />

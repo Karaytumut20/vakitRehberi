@@ -1,6 +1,7 @@
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { fetchAladhanTimes } from '@/lib/api';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ScrollView,
@@ -8,14 +9,15 @@ import {
   StyleSheet,
   TextStyle,
   TouchableOpacity,
-  View, // SafeAreaView yerine View kullanıyoruz
+  View,
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { getRandomContent } from '@/constants/islamicContent';
+import { getDailyFixedContent } from '@/constants/islamicContent';
 import {
   MonthlyPrayerDay,
   PrayerTimeData,
@@ -86,6 +88,7 @@ export default function HomeScreen() {
   const [times, setTimes] = useState<PrayerTimeData | null>(null);
   const [monthlyTimes, setMonthlyTimes] = useState<MonthlyPrayerDay[] | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
+  const [hijriDate, setHijriDate] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,14 +99,16 @@ export default function HomeScreen() {
   const [dailyInfo, setDailyInfo] = useState<{
     verse: { text: string; source: string };
     hadith: { text: string; source: string };
+    dua: { text: string; source: string };
   } | null>(null);
 
   const theme = useColorScheme() ?? 'light';
   const router = useRouter();
   const highlightColor = useThemeColor({}, 'highlight');
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    setDailyInfo(getRandomContent());
+    setDailyInfo(getDailyFixedContent());
   }, []);
 
   useEffect(() => {
@@ -130,6 +135,13 @@ export default function HomeScreen() {
       const location: LocationData = JSON.parse(locationJson);
       setSelectedLocation(location);
 
+      if (!location.id.includes(',')) {
+        await AsyncStorage.removeItem('@selected_location');
+        await AsyncStorage.removeItem('@cached_prayer_data');
+        router.push('/select-location');
+        return;
+      }
+
       const cachedDataJson = await AsyncStorage.getItem('@cached_prayer_data');
       if (cachedDataJson) {
         const cached: CachedPrayerData = JSON.parse(cachedDataJson);
@@ -155,12 +167,8 @@ export default function HomeScreen() {
 
   async function fetchPrayerTimes(locationId: string, todayDate: string): Promise<void> {
     try {
-      const res = await fetch(
-        `https://prayertimes.api.abdus.dev/api/diyanet/prayertimes?location_id=${locationId}`
-      );
-      if (!res.ok) throw new Error(`Vakitler alınamadı (HTTP ${res.status}).`);
-
-      const monthly: MonthlyPrayerDay[] = await res.json();
+      const [lat, lon] = locationId.split(',');
+      const monthly = await fetchAladhanTimes(lat, lon);
       processApiData(monthly);
 
       const cache: CachedPrayerData = {
@@ -195,6 +203,9 @@ export default function HomeScreen() {
           aksam: todayTimes.maghrib,
           yatsi: todayTimes.isha,
         });
+        if (todayTimes.hijriDate) {
+          setHijriDate(todayTimes.hijriDate);
+        }
         setMonthlyTimes(monthlyTimesArray);
       } else {
         setError('Veri bulundu ancak işlenemedi.');
@@ -259,9 +270,8 @@ export default function HomeScreen() {
     return () => clearInterval(intervalId);
   }, [times]);
 
-  // DÜZELTME: SafeAreaView yerine View kullanıldı
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top + 20, 40) }]}>
       <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />
       
       <ScrollView
@@ -271,34 +281,23 @@ export default function HomeScreen() {
         <View style={styles.headerRow}>
           <View>
             <ThemedText style={styles.appTitle}>Vakit Rehberi</ThemedText>
+            {hijriDate && (
+              <ThemedText style={styles.hijriText}>{hijriDate}</ThemedText>
+            )}
             {selectedLocation && (
               <ThemedText style={styles.locationText}>
-                {selectedLocation.name}
+                <MaterialIcons name="location-pin" size={14} color="#e1c564" /> {selectedLocation.name}
               </ThemedText>
             )}
           </View>
 
           <TouchableOpacity
-            style={[styles.locationButton, { borderColor: '#e1c564' }]}
+            style={styles.locationButton}
             onPress={() => router.push('/select-location')}
           >
-            <ThemedText style={[styles.locationButtonText, { color: '#e1c564' }]}>
-              Konum Değiştir
-            </ThemedText>
+            <ThemedText style={styles.locationButtonText}>Konum Değiştir</ThemedText>
           </TouchableOpacity>
         </View>
-
-        <TouchableOpacity 
-          style={[styles.quranButton, { borderColor: '#e1c56433', backgroundColor: '#14120f' }]}
-          onPress={() => router.push('/quran')}
-        >
-          <ThemedText style={{fontSize: 24}}>📖</ThemedText>
-          <View style={{flex: 1, marginLeft: 12}}>
-            <ThemedText style={[styles.premiumLabel, {color: '#e1c564'}]}>Kur'an-ı Kerim</ThemedText>
-            <ThemedText style={{color: '#888', fontSize: 12}}>Sureleri oku</ThemedText>
-          </View>
-          <MaterialIcons name="chevron-right" size={24} color="#e1c564" />
-        </TouchableOpacity>
 
         {error && (
           <View style={styles.errorBox}>
@@ -310,7 +309,7 @@ export default function HomeScreen() {
         )}
 
         {times && (
-          <View style={[styles.currentCard, { backgroundColor: '#090906', borderColor: '#e1af64ff' }]}>
+          <View style={styles.currentCard}>
             <ThemedText style={styles.currentLabel}>Şu anki vakit</ThemedText>
             <ThemedText style={[styles.currentName, { color: highlightColor }]}>
               {currentPrayer ?? '—'}
@@ -327,23 +326,6 @@ export default function HomeScreen() {
               </View>
             </View>
           </View>
-        )}
-
-      
-
-        {dailyInfo && (
-          <>
-            <View style={[styles.infoCard, { borderColor: '#e1c56433' }]}>
-              <View style={styles.cardHeader}>
-                <ThemedText style={styles.cardIcon}>📖</ThemedText>
-                <ThemedText style={[styles.cardTitle, { color: '#e1c564' }]}>Günün Ayeti</ThemedText>
-              </View>
-              <ThemedText style={styles.cardText}>"{dailyInfo.verse.text}"</ThemedText>
-              <ThemedText style={styles.cardSource}>— {dailyInfo.verse.source}</ThemedText>
-            </View>
-
-         
-          </>
         )}
 
         {times && (
@@ -374,6 +356,45 @@ export default function HomeScreen() {
             })}
           </View>
         )}
+
+        {/* Günün İçerikleri Widgetları */}
+        {dailyInfo && (
+          <View style={styles.dailyContentsContainer}>
+            <View style={styles.infoCard}>
+              <View style={styles.cardHeader}>
+                <View style={[styles.cardIconBox, { backgroundColor: 'rgba(225,197,100,0.1)' }]}>
+                   <MaterialCommunityIcons name="book-open-variant" size={18} color="#e1c564" />
+                </View>
+                <ThemedText style={styles.cardTitle}>Günün Ayeti</ThemedText>
+              </View>
+              <ThemedText style={styles.cardText}>"{dailyInfo.verse.text}"</ThemedText>
+              <ThemedText style={styles.cardSource}>— {dailyInfo.verse.source}</ThemedText>
+            </View>
+
+            <View style={styles.infoCard}>
+              <View style={styles.cardHeader}>
+                <View style={[styles.cardIconBox, { backgroundColor: 'rgba(25,130,196,0.1)' }]}>
+                   <MaterialCommunityIcons name="comment-quote" size={18} color="#1982c4" />
+                </View>
+                <ThemedText style={styles.cardTitle}>Günün Hadisi</ThemedText>
+              </View>
+              <ThemedText style={styles.cardText}>"{dailyInfo.hadith.text}"</ThemedText>
+              <ThemedText style={styles.cardSource}>— {dailyInfo.hadith.source}</ThemedText>
+            </View>
+
+            <View style={styles.infoCard}>
+              <View style={styles.cardHeader}>
+                <View style={[styles.cardIconBox, { backgroundColor: 'rgba(138,201,38,0.1)' }]}>
+                  <MaterialCommunityIcons name="hands-pray" size={18} color="#8ac926" />
+                </View>
+                <ThemedText style={styles.cardTitle}>Günün Duası</ThemedText>
+              </View>
+              <ThemedText style={styles.cardText}>"{dailyInfo.dua.text}"</ThemedText>
+              <ThemedText style={styles.cardSource}>— {dailyInfo.dua.source}</ThemedText>
+            </View>
+          </View>
+        )}
+
       </ScrollView>
     </View>
   );
@@ -385,87 +406,56 @@ const styles = StyleSheet.create({
     backgroundColor: '#090906',
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 30,
-    gap: 16,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 40,
+    gap: 18,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 4,
   },
   appTitle: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 26,
+    lineHeight: 34,
+    fontWeight: '800',
     color: '#e1c564',
+    letterSpacing: -0.5,
+  } as TextStyle,
+  hijriText: {
+    fontSize: 13,
+    color: '#a0a0a0',
+    marginTop: 2,
+    fontWeight: '500',
   } as TextStyle,
   locationText: {
     marginTop: 4,
     fontSize: 14,
-    opacity: 0.8,
+    fontWeight: '600',
     color: '#e1c564',
   } as TextStyle,
   locationButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 1,
-    backgroundColor: 'rgba(0,0,0,0.02)',
+    borderColor: '#e1c56433',
+    backgroundColor: '#1a1814',
   },
   locationButtonText: {
-    fontSize: 13,
-    fontWeight: '500',
-  } as TextStyle,
-  quranButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: 4,
-  },
-  infoCard: {
-    padding: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    backgroundColor: '#0b0b0a',
-    gap: 6,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  cardIcon: {
-    fontSize: 18,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  } as TextStyle,
-  cardText: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: '#e5e5e5',
-    fontStyle: 'italic',
-  } as TextStyle,
-  cardSource: {
-    fontSize: 12,
     color: '#e1c564',
-    textAlign: 'right',
-    marginTop: 4,
+    fontSize: 12,
     fontWeight: '600',
   } as TextStyle,
   errorBox: {
-    padding: 12,
-    borderRadius: 12,
+    padding: 16,
+    borderRadius: 16,
     backgroundColor: '#ffefef',
     borderWidth: 1,
     borderColor: '#ffcccc',
-    gap: 8,
+    gap: 12,
   },
   errorText: {
     fontSize: 14,
@@ -473,99 +463,152 @@ const styles = StyleSheet.create({
   } as TextStyle,
   retryButton: {
     alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
     backgroundColor: '#b00020',
   },
   retryButtonText: {
     color: '#fff',
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '600',
   } as TextStyle,
   currentCard: {
-    padding: 18,
-    borderRadius: 18,
+    width: '100%',
+    padding: 24,
+    borderRadius: 24,
+    backgroundColor: '#14120f',
     borderWidth: 1,
+    borderColor: '#e1c56444',
     gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowColor: '#e1c564',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 5,
   },
   currentLabel: {
-    fontSize: 13,
-    opacity: 0.8,
+    fontSize: 14,
+    fontWeight: '500',
     color: '#e1af64ff',
   } as TextStyle,
   currentName: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 36,
+    lineHeight: 44,
+    fontWeight: '800',
+    letterSpacing: -1,
   } as TextStyle,
   nextRow: {
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
   },
   nextLabel: {
-    fontSize: 12,
-    opacity: 0.7,
-    color: '#e1af64ff',
+    fontSize: 13,
+    color: '#888',
   } as TextStyle,
   nextName: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#e1af64ff',
   } as TextStyle,
   countdownBox: {
     alignItems: 'flex-end',
   },
   countdownLabel: {
-    fontSize: 12,
-    opacity: 0.7,
-    color: '#e1af64ff',
+    fontSize: 13,
+    color: '#888',
   } as TextStyle,
   countdownValue: {
     marginTop: 2,
-    fontSize: 18,
+    fontSize: 20,
+    lineHeight: 28,
     fontVariant: ['tabular-nums'],
-    fontWeight: '600',
+    fontWeight: '800',
     color: '#e1af64ff',
   } as TextStyle,
   premiumTable: {
-    backgroundColor: '#0b0b0a',
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    width: '100%',
+    backgroundColor: '#14120f',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#e1c56433',
-    marginTop: 6,
+    borderColor: '#e1c56422',
   },
   premiumRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 4,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#e1c56422',
+    borderBottomColor: '#252525',
   },
   premiumRowLast: {
     borderBottomWidth: 0,
   },
   premiumRowActive: {
-    backgroundColor: 'rgba(225,197,100,0.06)',
+    backgroundColor: 'rgba(225,197,100,0.1)',
+    borderRadius: 12,
   },
   premiumLabel: {
-    color: '#e1c564',
-    fontSize: 15,
+    color: '#ddd',
+    fontSize: 16,
     fontWeight: '500',
   } as TextStyle,
   premiumTime: {
     color: '#e1c564',
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
     fontVariant: ['tabular-nums'],
+  } as TextStyle,
+  dailyContentsContainer: {
+    gap: 16,
+    marginTop: 8,
+  },
+  infoCard: {
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    backgroundColor: '#111',
+    borderColor: '#333',
+    gap: 12,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 4,
+  },
+  cardIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  } as TextStyle,
+  cardText: {
+    fontSize: 15,
+    lineHeight: 24,
+    color: '#ccc',
+    fontStyle: 'italic',
+  } as TextStyle,
+  cardSource: {
+    fontSize: 13,
+    color: '#888',
+    textAlign: 'right',
+    marginTop: 4,
+    fontWeight: '600',
   } as TextStyle,
 });

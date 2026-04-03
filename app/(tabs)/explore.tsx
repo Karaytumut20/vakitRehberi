@@ -1,226 +1,71 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  TextStyle,
-  View, // SafeAreaView yerine View
-} from 'react-native';
-
+import { View, StyleSheet, TouchableOpacity, ScrollView, TextStyle } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
+import { MaterialCommunityIcons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-interface PrayerDay {
-  date: string;
-  fajr: string;
-  sun: string;
-  dhuhr: string;
-  asr: string;
-  maghrib: string;
-  isha: string;
-}
-
-interface CachedPrayerData {
-  locationId: string;
-  fetchDate: string;
-  monthlyTimes: PrayerDay[];
-}
-
-interface LocationData {
-  id: string;
-  name: string;
-}
-
-const CACHE_KEY = '@cached_prayer_data';
-const LOCATION_KEY = '@selected_location';
-
-function getTodayDate(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
-    2,
-    '0'
-  )}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function formatDateTR(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('tr-TR', {
-      day: '2-digit',
-      month: 'long',
-    });
-  } catch {
-    return dateStr;
-  }
-}
-
-export default function MonthlyScreen() {
-  const [monthlyTimes, setMonthlyTimes] = useState<PrayerDay[] | null>(null);
-  const [location, setLocation] = useState<LocationData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
+export default function ExploreScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  
   const gold = '#e1c564';
   const goldDark = '#e1af64ff';
-  const cardBackgroundColor = '#0b0b0a';
-  const borderGoldSoft = '#e1c56433';
 
-  useEffect(() => {
-    async function loadMonthly() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const locationJson = await AsyncStorage.getItem(LOCATION_KEY);
-        if (!locationJson) {
-          setError('Lütfen önce konum seçin.');
-          setLoading(false);
-          return;
-        }
-
-        const loc: LocationData = JSON.parse(locationJson);
-        setLocation(loc);
-
-        const cachedJson = await AsyncStorage.getItem(CACHE_KEY);
-        if (cachedJson) {
-          const cached: CachedPrayerData = JSON.parse(cachedJson);
-          if (cached.locationId === loc.id && Array.isArray(cached.monthlyTimes)) {
-            setMonthlyTimes(cached.monthlyTimes);
-            setLoading(false);
-            return;
-          }
-        }
-
-        const today = getTodayDate();
-        const res = await fetch(
-          `https://prayertimes.api.abdus.dev/api/diyanet/prayertimes?location_id=${loc.id}`
-        );
-
-        if (!res.ok) {
-          throw new Error(`Vakitler alınamadı (HTTP ${res.status}).`);
-        }
-
-        const monthly: PrayerDay[] = await res.json();
-        setMonthlyTimes(monthly);
-
-        const cache: CachedPrayerData = {
-          locationId: loc.id,
-          fetchDate: today,
-          monthlyTimes: monthly,
-        };
-        await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-      } catch (e: any) {
-        console.warn('Monthly load error:', e);
-        setError(e?.message ?? 'Aylık takvim yüklenirken hata oluştu.');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadMonthly();
-  }, []);
-
-  const todayStr = getTodayDate();
-
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={gold} />
-        <ThemedText style={[styles.loadingText, { color: gold }]}>
-          Aylık takvim yükleniyor...
-        </ThemedText>
-      </View>
-    );
-  }
-
-  // DÜZELTME: SafeAreaView yerine View
   return (
-    <View style={styles.container}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Başlık */}
-        <View style={styles.header}>
-          <ThemedText style={[styles.title, { color: gold }]}>
-            Aylık Takvim
-          </ThemedText>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <ThemedText style={styles.title}>Keşfet</ThemedText>
+        <ThemedText style={styles.subtitle}>İslami yaşam araçları ve pratik bilgiler</ThemedText>
+      </View>
 
-          {location && (
-            <ThemedText style={[styles.location, { color: goldDark }]}>
-              {location.name}
-            </ThemedText>
-          )}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        <TouchableOpacity 
+          style={styles.card}
+          onPress={() => router.push('/monthly')}
+        >
+          <View style={[styles.iconContainer, { backgroundColor: 'rgba(225,197,100,0.1)' }]}>
+             <MaterialIcons name="date-range" size={28} color={gold} />
+          </View>
+          <View style={styles.cardTextContainer}>
+            <ThemedText style={styles.cardTitle}>Aylık Takvim</ThemedText>
+            <ThemedText style={styles.cardDesc}>Bu aya ait tüm namaz vakitlerini görüntüle</ThemedText>
+          </View>
+          <MaterialIcons name="chevron-right" size={24} color="#555" />
+        </TouchableOpacity>
 
-          <ThemedText style={[styles.subtitle, { color: goldDark }]}>
-            Bu ayın tüm namaz vakitlerini aşağıdaki listeden
-            inceleyebilirsiniz.
-          </ThemedText>
+        <TouchableOpacity 
+          style={styles.card}
+          onPress={() => router.push('/qibla')}
+        >
+          <View style={[styles.iconContainer, { backgroundColor: 'rgba(0,180,216,0.1)' }]}>
+             <FontAwesome5 name="compass" size={28} color="#00b4d8" />
+          </View>
+          <View style={styles.cardTextContainer}>
+            <ThemedText style={styles.cardTitle}>Kıble Pusulası</ThemedText>
+            <ThemedText style={styles.cardDesc}>Dünyanın neresinde olursan ol kıbleyi bul</ThemedText>
+          </View>
+          <MaterialIcons name="chevron-right" size={24} color="#555" />
+        </TouchableOpacity>
+
+        <View style={styles.comingSoonContainer}>
+          <TouchableOpacity 
+            style={[styles.card, { opacity: 0.6 }]}
+            disabled={true}
+          >
+            <View style={[styles.iconContainer, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
+               <MaterialCommunityIcons name="hands-pray" size={28} color="#fff" />
+            </View>
+            <View style={styles.cardTextContainer}>
+              <ThemedText style={styles.cardTitle}>Dualar & Zikirler</ThemedText>
+              <ThemedText style={styles.cardDesc}>Hisnul Müslim dua kütüphanesi</ThemedText>
+            </View>
+            <View style={styles.comingSoonBadge}>
+              <ThemedText style={styles.comingSoonText}>Yakında</ThemedText>
+            </View>
+          </TouchableOpacity>
         </View>
 
-        {/* Hata Mesajı */}
-        {error && (
-          <View style={[styles.errorBox, { borderColor: '#b00020', backgroundColor: '#330000' }]}>
-            <ThemedText style={styles.errorText}>{error}</ThemedText>
-          </View>
-        )}
-
-        {/* Aylık Liste */}
-        {monthlyTimes && (
-          <View style={styles.monthList}>
-            {monthlyTimes.map((day) => {
-              const isToday = day.date.startsWith(todayStr);
-              return (
-                <View
-                  key={day.date}
-                  style={[
-                    styles.dayCard,
-                    {
-                      backgroundColor: cardBackgroundColor,
-                      borderColor: isToday ? gold : borderGoldSoft,
-                    },
-                    isToday && {
-                      shadowColor: gold,
-                      shadowOpacity: 0.3,
-                      shadowRadius: 8,
-                    },
-                  ]}
-                >
-                  <View style={styles.dayHeader}>
-                    <ThemedText style={[styles.dayDate, { color: isToday ? gold : goldDark }]}>
-                      {formatDateTR(day.date)}
-                    </ThemedText>
-                    {isToday && (
-                      <ThemedText style={[styles.todayBadge, { borderColor: gold, color: gold }]}>
-                        Bugün
-                      </ThemedText>
-                    )}
-                  </View>
-
-                  <View style={styles.timesGrid}>
-                    {[
-                      ['İmsak', day.fajr],
-                      ['Güneş', day.sun],
-                      ['Öğle', day.dhuhr],
-                      ['İkindi', day.asr],
-                      ['Akşam', day.maghrib],
-                      ['Yatsı', day.isha],
-                    ].map(([label, value]) => (
-                      <View key={label} style={styles.timeCol}>
-                        <ThemedText style={[styles.timeLabel, { color: goldDark }]}>
-                          {label}
-                        </ThemedText>
-                        <ThemedText style={[styles.timeValue, { color: gold }]}>
-                          {value || '--:--'}
-                        </ThemedText>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        )}
       </ScrollView>
     </View>
   );
@@ -231,90 +76,67 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#090906',
   },
-  centered: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 16,
-    fontWeight: '500',
-  } as TextStyle,
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 30,
-    gap: 12,
-  },
   header: {
-    alignItems: 'center',
-    marginBottom: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   title: {
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: '700',
-  } as TextStyle,
-  location: {
-    marginTop: 4,
-    fontSize: 14,
-    opacity: 0.9,
+    color: '#e1c564',
   } as TextStyle,
   subtitle: {
-    marginTop: 6,
-    fontSize: 13,
-    textAlign: 'center',
-    opacity: 0.8,
-  } as TextStyle,
-  errorBox: {
-    padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  errorText: {
     fontSize: 14,
-    color: '#ff9999',
-  } as TextStyle,
-  monthList: {
-    gap: 10,
-  },
-  dayCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 12,
-  },
-  dayHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  dayDate: {
-    fontSize: 16,
-    fontWeight: '600',
-  } as TextStyle,
-  todayBadge: {
-    fontSize: 11,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  } as TextStyle,
-  timesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    color: '#aaa',
     marginTop: 4,
-  },
-  timeCol: {
-    width: '30%',
-    minWidth: '30%',
-  },
-  timeLabel: {
-    fontSize: 12,
-    opacity: 0.7,
   } as TextStyle,
-  timeValue: {
-    fontSize: 14,
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    gap: 16,
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#14120f',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e1c56422',
+  },
+  iconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  cardTextContainer: {
+    flex: 1,
+  },
+  cardTitle: {
+    fontSize: 18,
     fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  } as TextStyle,
+  cardDesc: {
+    fontSize: 13,
+    color: '#888',
+  } as TextStyle,
+  comingSoonContainer: {
+    marginTop: 8,
+  },
+  comingSoonBadge: {
+    backgroundColor: '#333',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  comingSoonText: {
+    fontSize: 10,
+    color: '#fff',
+    fontWeight: 'bold',
   } as TextStyle,
 });

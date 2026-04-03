@@ -1,5 +1,3 @@
-// Dosya Yolu: src/constants/dailyContent.js
-
 export const DAILY_CONTENT = {
   verses: [
     { text: "Şüphesiz namaz, müminlere belirli vakitlerde farz kılınmıştır.", source: "Nisa Suresi, 103. Ayet" },
@@ -33,6 +31,22 @@ export const DAILY_CONTENT = {
     { text: "Size selam verildiği zaman, ondan daha güzeliyle veya aynısı ile karşılık verin.", source: "Nisa Suresi, 86. Ayet" },
     { text: "Ancak sana kulluk eder ve ancak senden yardım dileriz.", source: "Fatiha Suresi, 5. Ayet" }
   ],
+  hadiths: [
+    { text: "Kolaylaştırınız, zorlaştırmayınız. Müjdeleyiniz, nefret ettirmeyiniz.", source: "Buhârî, İlim, 11" },
+    { text: "İki nimet vardır ki, insanların çoğu bunda aldanmıştır: Sağlık ve boş vakit.", source: "Buhârî, Rikak, 1" },
+    { text: "Müslüman, Müslümanın kardeşidir. Ona zulmetmez, onu (zalimlere de) teslim etmez.", source: "Müslim, Birr, 58" },
+    { text: "Sizin en hayırlınız, Kur'an'ı öğrenen ve öğretendir.", source: "Buhârî, Fezâilü'l-Kur'ân, 21" },
+    { text: "Allah sizin suretlerinize ve mallarınıza bakmaz, kalplerinize ve amellerinize bakar.", source: "Müslim, Birr, 34" },
+    { text: "Ameller niyetlere göredir.", source: "Buhârî, Bed'ü'l-Vahy, 1" },
+    { text: "Kişi sevdiği ile beraberdir.", source: "Buhârî, Edeb, 96" }
+  ],
+  duas: [
+    { text: "Allahım! Beni bağışla, bana merhamet et, bana hidayet ver, bana afiyet ver ve beni rızıklandır.", source: "Müslim, Zikir, 35" },
+    { text: "Rabbim, göğsümü aç, işimi kolaylaştır.", source: "Taha Suresi, 25-26" },
+    { text: "Ey kalpleri halden hale çeviren Allah'ım! Kalbimi dinin üzere sabit kıl.", source: "Tirmizî, Kader, 7" },
+    { text: "Allah'ım! Sen affedicisin, affetmeyi seversin, beni de affet.", source: "Tirmizî, De'avât, 84" },
+    { text: "Rabbimiz! Bize dünyada da iyilik ver, ahirette de iyilik ver ve bizi ateş azabından koru.", source: "Bakara Suresi, 201" }
+  ],
   // Vakte özel mesajlar
   prayerSpecific: {
     'İmsak': "Güneş doğmadan önceki bu bereketli vakitte dua etmeyi unutma.",
@@ -45,17 +59,18 @@ export const DAILY_CONTENT = {
 };
 
 /**
- * Rastgele bir Ayet döndürür.
- * (Hadisler kaldırıldı, sadece 'verse' döner)
+ * Rastgele bir Ayet, Hadis ve Dua döndürür.
  */
 export function getRandomContent() {
   const randomVerse = DAILY_CONTENT.verses[Math.floor(Math.random() * DAILY_CONTENT.verses.length)];
-  return { verse: randomVerse };
+  const randomHadith = DAILY_CONTENT.hadiths[Math.floor(Math.random() * DAILY_CONTENT.hadiths.length)];
+  const randomDua = DAILY_CONTENT.duas[Math.floor(Math.random() * DAILY_CONTENT.duas.length)];
+  return { verse: randomVerse, hadith: randomHadith, dua: randomDua };
 }
 
 /**
- * Yılın gününe göre sabit bir Ayet döndürür.
- * Bugün uygulamaya giren herkes aynı ayeti görür.
+ * Yılın gününe göre sabit bir Ayet, Hadis ve Dua döndürür.
+ * Bugün uygulamaya giren herkes aynı içeriği görür.
  */
 export function getDailyFixedContent() {
     const today = new Date();
@@ -65,8 +80,12 @@ export function getDailyFixedContent() {
     const dayOfYear = Math.floor(diff / oneDay);
 
     const verseIndex = dayOfYear % DAILY_CONTENT.verses.length;
+    const hadithIndex = dayOfYear % DAILY_CONTENT.hadiths.length;
+    const duaIndex = dayOfYear % DAILY_CONTENT.duas.length;
 
     return {
-        verse: DAILY_CONTENT.verses[verseIndex]
+        verse: DAILY_CONTENT.verses[verseIndex],
+        hadith: DAILY_CONTENT.hadiths[hadithIndex],
+        dua: DAILY_CONTENT.duas[duaIndex]
     };
 }

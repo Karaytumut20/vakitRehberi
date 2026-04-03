@@ -3,15 +3,17 @@
 import * as KeepAwake from 'expo-keep-awake';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Dimensions, StyleSheet, View, TouchableOpacity } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
@@ -95,6 +97,8 @@ export default function QiblaScreen() {
   const discRotation = useSharedValue(0); // disc rotation
   const qiblaAbsoluteAngle = useSharedValue(0); // kıble N’e göre açı
 
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const qiblaReadyRef = useRef(false);
 
   // Ekranı açık tut
@@ -217,13 +221,19 @@ await KeepAwake.activateKeepAwakeAsync();
     qiblaDirection != null ? `${Math.round(qiblaDirection)}°` : '--°';
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <ThemedText style={styles.title}>Kıble Pusulası</ThemedText>
-        <ThemedText style={styles.subtitle}>
-          Cihazını düz tut, kırmızı çizgiyi Kâbe ikonuna hizala
-        </ThemedText>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <MaterialIcons name="arrow-back" size={28} color={GOLD} />
+        </TouchableOpacity>
+        <View style={styles.titleContainer}>
+          <ThemedText style={styles.title}>Kıble Pusulası</ThemedText>
+          <ThemedText style={styles.subtitle}>
+            Cihazını düz tut, kırmızı çizgiyi Kâbe ikonuna hizala
+          </ThemedText>
+        </View>
+        <View style={{ width: 28 }} />
       </View>
 
       {qiblaDirection == null ? (
@@ -348,13 +358,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: BG,
-    paddingTop: 60,
     paddingHorizontal: 16,
   },
 
   header: {
-    alignItems: 'center',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
     marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e1c56433',
+  },
+  backBtn: { padding: 4 },
+  titleContainer: {
+    alignItems: 'center',
+    flex: 1,
   },
   title: {
     fontSize: 24,
